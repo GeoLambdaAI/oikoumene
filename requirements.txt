@@ -1,6 +1,7 @@
 # Python 3.11+ required — see pyproject.toml ([project] requires-python).
-# Optional extras: pip install -e ".[viz]"  (matplotlib + pandas for scripts/figures.py)
-#                  pip install -e ".[dev]"  (pytest + pytest-cov + ruff + mypy)
+# Optional extras: pip install -e ".[viz]"    (matplotlib + pandas for scripts/figures.py)
+#                  pip install -e ".[dev]"    (pytest + pytest-cov + ruff + mypy)
+#                  pip install -e ".[torch]"  (PyTorch JEPA backend; CPU or CUDA)
 
 numpy>=1.24.0
 flask>=3.0.0

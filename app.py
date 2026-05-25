@@ -205,6 +205,15 @@ def get_god_log():
     return jsonify(world.god_mode.get_intervention_log())
 
 
+@app.route("/api/jepa/status")
+def get_jepa_status():
+    if world is None:
+        from world import _torch_available
+        return jsonify({"backend": "numpy", "preset": "default",
+                        "torch_available": _torch_available()})
+    return jsonify(world.get_jepa_status())
+
+
 @app.route("/api/dialogues")
 def get_dialogues():
     if world is None:
@@ -293,6 +302,37 @@ def on_test_llm():
     if world:
         result = world.llm.test_connection()
         socketio.emit("llm_test_result", result)
+
+
+# ---- JEPA World-Model Backend ----
+@socketio.on("set_jepa_backend")
+def on_set_jepa_backend(data):
+    """Swap the shared JEPA backend/preset at runtime.
+
+    Rebuilding the model and repointing every agent must not interleave with
+    a tick, so the sim loop is paused for the swap (cooperative eventlet
+    scheduling means this is the same safety pattern used by on_reset) and
+    resumed afterwards only if it was running and the swap succeeded.
+    """
+    global sim_running, sim_thread
+    if not world:
+        return
+    backend = data.get("backend", "numpy")
+    preset = data.get("preset", "default")
+    device = data.get("device", "auto")
+
+    was_running = sim_running
+    if was_running:
+        sim_running = False
+        time.sleep(0.12)  # let the current tick finish before swapping
+
+    result = world.set_jepa_backend(backend=backend, preset=preset, device=device)
+
+    if was_running:
+        sim_running = True
+        sim_thread = eventlet.spawn(simulation_loop)
+
+    socketio.emit("jepa_status", result)
 
 
 # ---- God Mode ----

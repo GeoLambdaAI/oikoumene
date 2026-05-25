@@ -7,6 +7,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-05-25
+
+Adds the PyTorch JEPA backend that earlier releases listed as a v0.3
+candidate. The backend is opt-in; the default NumPy path and all prior
+behaviour are unchanged. This release also closes documentation/test gaps
+found in an upload-readiness audit.
+
+### Added — PyTorch JEPA backend
+
+- **`world_model_torch.py`** — a PyTorch re-implementation of the JEPA
+  world model (encoder, AdaLN predictor, SIGReg, CEM planner) using autograd
+  instead of the hand-written NumPy backprop. At its default settings it
+  reproduces `world_model.py` exactly: weights copied across backends via
+  `load_numpy_params` / `export_numpy_params` produce encode/predict outputs
+  matching to < 1e-4 (verified in `test_world_model_torch.py`). CPU by
+  default with optional CUDA (`device="auto"`); `torch.set_num_threads(1)`
+  by default to stay friendly to the eventlet server loop.
+- **Paper-aligned toggles (opt-in, off by default):** `sigreg_mode=
+  "epps_pulley"` implements the LeWorldModel (Maes et al. 2026,
+  arXiv:2603.19312) characteristic-function SIGReg with the paper's
+  λ = 0.1 and a large projection count, plus `predictor_dropout`. The
+  default `moments` SIGReg (M = 15, λ = 0.01) is unchanged.
+- **`SharedWorldModel(backend="numpy"|"torch", ...)`** dispatch; the torch
+  import is lazy so PyTorch remains an optional dependency
+  (`pip install -e ".[torch]"`).
+- **Dashboard JEPA tab** — select backend (NumPy / PyTorch), settings preset
+  (Repo default / Paper), and device at runtime via `set_jepa_backend`
+  (`app.py`) / `World.set_jepa_backend` (`world.py`). The swap preserves the
+  experience buffer and repoints all agents; the sim loop is paused during
+  the swap and resumed. Falls back gracefully with a clear message when
+  PyTorch is not installed.
+
+### Added — tests
+
+- **`test_world_model_gradcheck.py`** — central finite-difference gradient
+  checks for every analytic backward pass (linear, GELU, RMSNorm, AdaLN,
+  SIGReg). Measured relative error < 1e-8. This is the test prior READMEs
+  referred to but did not ship.
+- **`test_world_model.py`** — JEPA learning/inference behaviour: prediction
+  loss reduction, learned action conditioning (zero-init AdaLN identity →
+  action-sensitive after training), anti-collapse, linear probe R², CEM
+  planner output validity.
+- **`test_world_model_torch.py`** — torch backend parity, weight cross-check,
+  Epps–Pulley toggle, and device handling (skips when torch is absent).
+
+### Fixed — documentation & packaging
+
+- README test table referenced two test files that did not exist
+  (`test_world_model.py`, `test_world_model_gradcheck.py`); both now ship.
+- `world_model.py` docstring pointed at a non-existent `test_layers_gradcheck.py`.
+- Project version was out of sync (`pyproject.toml` 0.1.0 vs CITATION/CHANGELOG
+  0.2.1); all now read 0.3.0.
+- `docs/validation.md` described the PyTorch port as future work; it is now
+  documented as implemented.
+- Added `.gitignore` and a GitHub Actions test workflow
+  (`.github/workflows/test.yml`, Python 3.11/3.12/3.13).
+- `test_macro.py` unit tests now `assert` instead of `return`-ing a bool
+  (removes pytest `PytestReturnNotNoneWarning`).
+
 ## [0.2.1] - 2026-05-06
 
 A same-day follow-up review pass on v0.2.0 surfaced five additional bugs

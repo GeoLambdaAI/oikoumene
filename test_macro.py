@@ -171,7 +171,7 @@ def test_climate_sensitivity_consistency():
     print(f"  Drift:                  {drift:.1%}")
     ok = drift < 0.02  # within 2%
     print(f"  {'PASS' if ok else 'FAIL'}: emergent and declared ECS within 2%")
-    return ok
+    assert ok, f"emergent ECS {ECS_emergent:.3f} vs declared {ECS_declared} drifts {drift:.1%}"
 
 
 def test_carbon_cycle_unit_anchor():
@@ -188,14 +188,19 @@ def test_carbon_cycle_unit_anchor():
     print(f"  Mauna Loa 2014-2024 decadal mean:    2.4-3.0 ppm/yr")
     ok = 2.0 <= dco2_per_yr <= 3.5
     print(f"  {'PASS' if ok else 'FAIL'}: within 2.0-3.5 envelope")
-    return ok
+    assert ok, f"dCO2/dt {dco2_per_yr:.2f} ppm/yr outside 2.0-3.5 envelope"
 
 
 if __name__ == "__main__":
     success = run_bau_scenario()
-    success_ecs = test_climate_sensitivity_consistency()
-    success_cc = test_carbon_cycle_unit_anchor()
+    unit_ok = True
+    for _fn in (test_climate_sensitivity_consistency, test_carbon_cycle_unit_anchor):
+        try:
+            _fn()
+        except AssertionError as exc:
+            print(f"  FAILED: {exc}")
+            unit_ok = False
     print("\n" + "=" * 70)
-    overall = success and success_ecs and success_cc
+    overall = success and unit_ok
     print(f"OVERALL: {'ALL PASS' if overall else 'SOME FAILED'}")
     sys.exit(0 if overall else 1)

@@ -106,11 +106,15 @@ Full per-year trace is reproducible via `python test_macro.py | tee logs/validat
    (`latent_dim = 24` in `SharedWorldModel` defaults; `hidden_dim = 48`),
    versus millions of parameters in the published papers. v0.2.0 replaced
    v0.1's directional finite-difference gradient estimator with hand-written
-   analytic back-propagation in pure NumPy, gradient-checked against finite
-   differences to <1e-10; v0.2.1 made the training-batch sampling
-   deterministic via a per-instance `RandomState`, removing global-RNG
-   coupling. A PyTorch port for larger latent dimensions remains a v0.3
-   candidate.
+   analytic back-propagation in pure NumPy, gradient-checked against central
+   finite differences to <1e-8 relative error
+   ([`test_world_model_gradcheck.py`](../test_world_model_gradcheck.py));
+   v0.2.1 made the training-batch sampling deterministic via a per-instance
+   `RandomState`, removing global-RNG coupling. v0.3.0 adds an opt-in PyTorch
+   backend ([`world_model_torch.py`](../world_model_torch.py)) with autograd
+   and optional CUDA for scaling `latent_dim` up; it reproduces the NumPy
+   model at default settings (cross-backend encode/predict agree to <1e-4)
+   and exposes the paper's Epps–Pulley SIGReg as an opt-in toggle.
 7. **Conceptual references vs. quantitative ones.** Diamond (1997),
    Dawkins (2009), Stringer (2012), and Marshak (2019) are cited at the
    *structural* level — the simulator implements the continental-axis

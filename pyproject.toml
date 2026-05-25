@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "world-genesis"
-version = "0.1.0"
+version = "0.3.0"
 description = "A physics-based, AI-driven simulation of human civilization on Planet Earth — JEPA agents, macro ODE, emergent geopolitics, real Earth geography."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -62,6 +62,9 @@ viz = [
     "matplotlib>=3.8",
     "pandas>=2.2",
 ]
+torch = [
+    "torch>=2.2",
+]
 
 [project.urls]
 Homepage = "https://www.geolambda.ai"
@@ -89,6 +92,7 @@ py-modules = [
     "sim_logger",
     "world",
     "world_model",
+    "world_model_torch",
 ]
 
 [tool.pytest.ini_options]

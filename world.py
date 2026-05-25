@@ -27,6 +27,12 @@ from shared_world_model import SharedWorldModel
 from sim_logger import SimulationLogger, LoggerConfig
 
 
+def _torch_available() -> bool:
+    """True if the optional PyTorch backend can be imported (no import cost)."""
+    import importlib.util
+    return importlib.util.find_spec("torch") is not None
+
+
 # ============================================================================
 # Paleodemography (UI-only display helper)
 # ============================================================================
@@ -459,8 +465,11 @@ class World:
         self.geopolitics = GeopoliticalSystem(rng=self.rng)
         self.bridge = MacroAgentBridge()
 
-        # Shared JEPA world model — all agents use this single model
+        # Shared JEPA world model — all agents use this single model.
+        # Backend (numpy default / torch) and preset are swappable at runtime
+        # via set_jepa_backend(); the dashboard exposes this as a knob.
         self.shared_world_model = SharedWorldModel(obs_dim=40, action_dim=8, latent_dim=24)
+        self.jepa_preset = "default"
         import agents as _agents_module
         _agents_module._shared_world_model = self.shared_world_model
 
@@ -1076,4 +1085,105 @@ class World:
             "llm_status": self.llm.get_status(),
             "god_mode_status": self.god_mode.get_status(),
             "logger": self.logger.get_status(),
+            "jepa_status": self.get_jepa_status(),
         }
+
+    # ------------------------------------------------------------------
+    # JEPA world-model backend control (numpy default / torch, swappable
+    # at runtime from the dashboard). See shared_world_model.SharedWorldModel
+    # and world_model_torch.TorchJEPAWorldModel.
+    # ------------------------------------------------------------------
+
+    # Presets exposed in the UI. "default" reproduces the repo's deployed
+    # config exactly; "paper" enables the LeWorldModel (Maes et al. 2026,
+    # arXiv:2603.19312) Epps-Pulley SIGReg with the paper's lambda and a
+    # large projection count, plus predictor dropout. "paper" requires torch.
+    JEPA_PRESETS = {
+        "default": {},
+        "paper": {
+            "sigreg_mode": "epps_pulley",
+            "sigreg_projections": 1024,
+            "lambda_reg": 0.1,
+            "predictor_dropout": 0.1,
+        },
+    }
+
+    def get_jepa_status(self) -> dict:
+        """Current JEPA world-model configuration for the dashboard."""
+        m = self.shared_world_model
+        j = m._jepa
+        device = getattr(j, "device", None)
+        return {
+            "backend": getattr(m, "backend", "numpy"),
+            "preset": getattr(self, "jepa_preset", "default"),
+            "latent_dim": m.latent_dim,
+            "sigreg_mode": getattr(j, "sigreg_mode", "moments"),
+            "sigreg_projections": getattr(j, "sigreg_projections", None),
+            "lambda_reg": round(float(m.lambda_reg), 4),
+            "train_steps": m.train_steps,
+            "buffer_size": len(m.experience_buffer),
+            "device": str(device) if device is not None else "cpu",
+            "torch_available": _torch_available(),
+        }
+
+    def set_jepa_backend(self, backend: str = "numpy", preset: str = "default",
+                         device: str = "auto") -> dict:
+        """
+        Rebuild the shared JEPA model with a new backend/preset at runtime.
+
+        The experience buffer is preserved across the swap (it holds backend-
+        agnostic numpy tuples), so accumulated learning data is not lost. All
+        agent references are repointed to the new model.
+
+        Returns a status dict; on failure (e.g. torch not installed, invalid
+        device) returns {"ok": False, "error": ...} with the unchanged status,
+        leaving the live model intact.
+        """
+        backend = (backend or "numpy").lower()
+        preset = (preset or "default").lower()
+
+        if backend not in ("numpy", "torch"):
+            return {"ok": False, "error": f"unknown backend: {backend}",
+                    **self.get_jepa_status()}
+        if preset not in self.JEPA_PRESETS:
+            return {"ok": False, "error": f"unknown preset: {preset}",
+                    **self.get_jepa_status()}
+        if backend == "numpy" and preset == "paper":
+            return {"ok": False,
+                    "error": "paper preset requires the torch backend",
+                    **self.get_jepa_status()}
+        if backend == "torch" and not _torch_available():
+            return {"ok": False,
+                    "error": "PyTorch is not installed (pip install 'torch>=2.2')",
+                    **self.get_jepa_status()}
+
+        old = self.shared_world_model
+        kwargs = {
+            "obs_dim": old.obs_dim,
+            "action_dim": old.action_dim,
+            "latent_dim": old.latent_dim,
+            "backend": backend,
+        }
+        if backend == "torch":
+            kwargs["device"] = device
+            kwargs.update(self.JEPA_PRESETS[preset])
+
+        try:
+            new_model = SharedWorldModel(**kwargs)
+        except Exception as exc:  # torch import/device/init failure
+            return {"ok": False, "error": str(exc), **self.get_jepa_status()}
+
+        # Preserve experience history (most-recent up to the new cap).
+        old_buf = list(old.experience_buffer)
+        if old_buf:
+            new_model.experience_buffer.extend(old_buf[-new_model.max_buffer_size:])
+
+        # Swap references everywhere the old model was held.
+        self.shared_world_model = new_model
+        self.jepa_preset = preset
+        import agents as _agents_module
+        _agents_module._shared_world_model = new_model
+        for agent in self.agents:
+            agent.world_model = new_model
+
+        return {"ok": True, **self.get_jepa_status()}

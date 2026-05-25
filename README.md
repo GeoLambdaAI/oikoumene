@@ -199,7 +199,7 @@ Each agent perceives the world through a **Joint Embedding Predictive Architectu
 | Predictor | MLP with **Adaptive Layer Normalization** (AdaLN) — action conditions each layer's scale and shift; zero-init scale/shift weights (DiT-style) | Maes et al. 2026, Section 3.2; Peebles & Xie 2022 |
 | SIGReg (v0.2) | Differentiable moments-matching variant: skewness² + kurtosis² + variance penalty along random unit-norm projections, in the spirit of Cramer-Wold gaussianity testing | Adapted from Maes et al. 2026, Section 4 |
 | CEM Planner | Cross-Entropy Method: sample action sequences, rollout in latent space, select elites, refine | LeCun 2022, Section 3.4 |
-| Training | L = L\_pred + λ · SIGReg(Z), **analytic backpropagation** (hand-implemented in NumPy, gradient-checked against finite differences to <1e-10), Adam optimizer with gradient clipping at 5.0 | LeCun 2022 |
+| Training | L = L\_pred + λ · SIGReg(Z), **analytic backpropagation** (hand-implemented in NumPy, gradient-checked against central finite differences to <1e-8 in `test_world_model_gradcheck.py`), Adam optimizer with gradient clipping at 5.0. An optional PyTorch backend (`world_model_torch.py`) uses autograd. | LeCun 2022 |
 
 **Loss function:**
 
@@ -208,6 +208,20 @@ L = ||z_hat_{t+1} - z_{t+1}||^2 + lambda * SIGReg(Z)
 ```
 
 where `z_hat_{t+1} = Predictor(Encoder(x_t), a_t)` and `z_{t+1} = Encoder(x_{t+1})`.
+
+**Backends (NumPy default, PyTorch optional).** The reference implementation in
+`world_model.py` is pure NumPy with hand-written, gradient-checked backprop. An
+opt-in PyTorch backend (`world_model_torch.py`) implements the identical
+architecture with autograd and optional CUDA. At its default settings it
+reproduces the NumPy model — weights copied across backends match encode/predict
+outputs to < 1e-4 — so it is a true drop-in, not a different model. It also adds
+*opt-in* paper-aligned toggles: an Epps–Pulley characteristic-function SIGReg
+(Maes et al. 2026) with λ = 0.1, and predictor dropout. Install with
+`pip install -e ".[torch]"`; select at runtime in code
+(`SharedWorldModel(backend="torch")`) or from the dashboard's **JEPA** tab
+(NumPy / PyTorch × Repo-default / Paper × device). Switching preserves the
+shared experience buffer; if PyTorch is not installed the option degrades
+gracefully and the NumPy backend keeps running.
 
 **Agent decision loop** (Kahneman's Dual Process Theory):
 - **System 1, symbolic** (every tick): Maslow-style needs hierarchy weights
@@ -407,9 +421,10 @@ altitude, and disease environment have higher survival and reproduction rates.
 | Module | Lines | Purpose |
 |--------|-------|---------|
 | `agents.py` | 1,208 | Autonomous agents: JEPA cognition, physics, traits, skills, memory, social actions |
-| `world.py` | 1,079 | World engine: tick loop, resources, businesses, settlements, scenario dispatch, era-aware UI summaries |
-| `world_model.py` | 701 | JEPA implementation: encoder, predictor (AdaLN), SIGReg, CEM planner, deterministic batch sampling |
-| `shared_world_model.py` | 229 | Single shared JEPA for all agents with batch encode/plan |
+| `world.py` | 1,189 | World engine: tick loop, resources, businesses, settlements, scenario dispatch, era-aware UI summaries, runtime JEPA backend swap |
+| `world_model.py` | 701 | JEPA implementation (NumPy, hand-written backprop): encoder, predictor (AdaLN), SIGReg, CEM planner, deterministic batch sampling |
+| `world_model_torch.py` | 534 | Optional PyTorch JEPA backend (autograd): same architecture, CUDA-ready, Epps–Pulley SIGReg toggle, NumPy weight bridge |
+| `shared_world_model.py` | 263 | Single shared JEPA for all agents with batch encode/plan; selects NumPy or PyTorch backend |
 | `macro.py` | 512 | 14-state ODE: climate, resources, pollution, socioeconomics |
 | `geopolitics.py` | 705 | Emergent nations, alliances, trade (gravity model), conflict (IFs) |
 | `bridge.py` | 456 | Bidirectional coupling: agents <-> macro <-> geopolitics; per-cell regen baselines |
@@ -443,9 +458,10 @@ altitude, and disease environment have higher survival and reproduction rates.
 | Test | Validates | Count |
 |------|-----------|-------|
 | `test_macro.py` | BAU 2025–2100 vs. IPCC AR6 SSP2-4.5/SSP3-7.0 envelope; carbon-cycle vs. Mauna Loa decadal mean; ECS-consistency unit test | 9 + 2 |
-| `test_world_model.py` | JEPA training: prediction-loss reduction, action-conditioning, anti-collapse, linear probe R², CEM planner output validity | 5 |
-| `test_world_model_gradcheck.py` | Backward implementations (linear, GELU, RMSNorm, AdaLN, SIGReg) verified against finite-difference gradients to <1e-10 | 5 |
+| `test_world_model.py` | JEPA training: prediction-loss reduction, learned action-conditioning, anti-collapse, linear probe R², CEM planner output validity | 5 |
+| `test_world_model_gradcheck.py` | Backward implementations (linear, GELU, RMSNorm, AdaLN, SIGReg) verified against central finite differences (measured relative error <1e-8) | 5 |
 | `test_shared_world_model.py` | Single vs. batch equivalence (max diff 1e-15), per-agent vs. plan_batch identity, edge cases | 6 |
+| `test_world_model_torch.py` | PyTorch backend (opt-in): single/batch parity, NumPy↔Torch weight cross-check (<1e-4), Epps–Pulley toggle, device handling (skips if torch absent) | 9 (+1 CUDA-gated) |
 | `test_agents_lifecycle.py` | Era-aware lifecycle thresholds across 4 eras, modern drift bounds, paleolithic 1-tick floor | 7 |
 | `test_geopolitics.py` | Haversine correctness, conflict monotonicity, 5-nation BAU prevalence calibration, summit-cadence independence | 5 |
 | `test_world.py` | Haversine threshold semantics, snapshot iteration safety | 4 |
@@ -517,7 +533,8 @@ that affected scientific correctness without breaking the runtime:
    10⁻⁴, so the prediction loss decreased only on the bias terms and the
    AdaLN action-conditioning weights were never updated at all. v0.2
    replaces this with hand-written analytic backpropagation in pure NumPy,
-   verified against finite-difference gradients to <1e-10 relative error.
+   verified against central finite differences to <1e-8 relative error
+   (`test_world_model_gradcheck.py`).
    On a synthetic toy problem with hidden physical parameters, prediction
    loss now decreases 103× and a linear probe recovers the hidden physics
    with R² = 0.98.

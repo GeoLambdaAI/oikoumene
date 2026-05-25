@@ -307,6 +307,7 @@
             <button class="tab-btn" data-tab="llm" onclick="switchTab('llm', event)">LLM</button>
             <button class="tab-btn" data-tab="god" onclick="switchTab('god', event)">God</button>
             <button class="tab-btn" data-tab="log" onclick="switchTab('log', event)">Log</button>
+            <button class="tab-btn" data-tab="jepa" onclick="switchTab('jepa', event)">JEPA</button>
             <button class="tab-btn" data-tab="events" onclick="switchTab('events', event)">Events</button>
             <button class="tab-btn" data-tab="charts" onclick="switchTab('charts', event)">Charts</button>
         </div>
@@ -561,6 +562,80 @@
             </div>
         </div>
 
+        <!-- JEPA World-Model Tab -->
+        <div id="tab-jepa" class="tab-content">
+            <div class="panel-section">
+                <h3>JEPA World Model</h3>
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+                    <span id="jepa-indicator" style="width:8px;height:8px;border-radius:50%;background:#60a5fa;display:inline-block"></span>
+                    <span id="jepa-status-text" style="font-size:11px;color:#9ca3af">NumPy (default)</span>
+                </div>
+                <div style="font-size:11px;margin-bottom:6px">
+                    <label style="color:#9ca3af">Backend:</label>
+                    <select id="jepa-backend" onchange="onJepaBackendChange()" style="background:#1e293b;color:#e0e6ed;border:1px solid #374151;border-radius:4px;padding:2px 4px;font-size:11px">
+                        <option value="numpy" selected>NumPy (default, hand-backprop)</option>
+                        <option value="torch">PyTorch (autograd, GPU-ready)</option>
+                    </select>
+                </div>
+                <div style="font-size:11px;margin-bottom:6px">
+                    <label style="color:#9ca3af">Settings:</label>
+                    <select id="jepa-preset" disabled style="background:#1e293b;color:#e0e6ed;border:1px solid #374151;border-radius:4px;padding:2px 4px;font-size:11px">
+                        <option value="default" selected>Repo default (moments SIGReg, M=15, &lambda;=0.01)</option>
+                        <option value="paper">Paper (Epps&ndash;Pulley, M=1024, &lambda;=0.1, dropout)</option>
+                    </select>
+                </div>
+                <div style="font-size:11px;margin-bottom:8px">
+                    <label style="color:#9ca3af">Device:</label>
+                    <select id="jepa-device" disabled style="background:#1e293b;color:#e0e6ed;border:1px solid #374151;border-radius:4px;padding:2px 4px;font-size:11px">
+                        <option value="auto" selected>Auto (CUDA if available)</option>
+                        <option value="cpu">CPU</option>
+                        <option value="cuda">CUDA</option>
+                    </select>
+                </div>
+                <button class="btn" id="jepa-apply" onclick="applyJepaBackend()" style="font-size:11px;padding:3px 10px">Apply</button>
+                <div id="jepa-apply-result" style="font-size:11px;color:#6b7280;margin-top:6px"></div>
+                <div id="jepa-torch-hint" style="font-size:10px;color:#6b7280;margin-top:4px"></div>
+            </div>
+            <div class="panel-section">
+                <h3>Live Configuration</h3>
+                <div style="font-size:11px">
+                    <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+                        <span style="color:#9ca3af">Backend:</span><span id="jepa-cfg-backend">numpy</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+                        <span style="color:#9ca3af">Device:</span><span id="jepa-cfg-device">cpu</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+                        <span style="color:#9ca3af">SIGReg mode:</span><span id="jepa-cfg-sigreg">moments</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+                        <span style="color:#9ca3af">Projections (M):</span><span id="jepa-cfg-proj">15</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+                        <span style="color:#9ca3af">&lambda; (reg weight):</span><span id="jepa-cfg-lambda">0.01</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+                        <span style="color:#9ca3af">Latent dim:</span><span id="jepa-cfg-latent">24</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+                        <span style="color:#9ca3af">Train steps:</span><span id="jepa-cfg-steps" style="color:#4ade80">0</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+                        <span style="color:#9ca3af">Buffer size:</span><span id="jepa-cfg-buffer">0</span>
+                    </div>
+                </div>
+            </div>
+            <div class="panel-section">
+                <div style="font-size:10px;color:#6b7280">
+                    Both backends share one model across all agents. The PyTorch
+                    backend reproduces the NumPy model at default settings (weights
+                    are cross-checked to &lt;1e-4). The Paper preset follows LeWorldModel
+                    (Maes et al. 2026, arXiv:2603.19312). Switching preserves the
+                    experience buffer; training continues inline every 20 ticks.
+                </div>
+            </div>
+        </div>
+
         <div id="tab-world" class="tab-content">
             <div class="panel-section">
                 <h3>Map Tiles</h3>
@@ -692,6 +767,8 @@ socket = io();
 
 socket.on('connect', () => {
     console.log('Connected to simulation server');
+    // Populate JEPA panel (incl. torch availability) before any full_state.
+    fetch('/api/jepa/status').then(r => r.json()).then(updateJepaUI).catch(() => {});
 });
 
 socket.on('full_state', (data) => {
@@ -708,6 +785,7 @@ socket.on('full_state', (data) => {
     try { updateLLMStats(data.stats); } catch(e) { console.error('updateLLMStats:', e); }
     try { updateGodModeUI(data.stats); } catch(e) { console.error('updateGodModeUI:', e); }
     try { updateLoggerUI(data); } catch(e) { console.error('updateLoggerUI:', e); }
+    try { updateJepaUI(data.jepa_status); } catch(e) { console.error('updateJepaUI:', e); }
     if (selectedAgent) {
         const a = data.agents.find(a => a.id === selectedAgent.id);
         if (a) { selectedAgent = a; renderAgentDetail(a); }
@@ -1399,6 +1477,81 @@ function updateDialogueFeed() {
             <div style="color:#d1d5db;font-size:10px;margin-top:1px">${d.text || ''}</div>
         </div>`
     ).join('');
+}
+
+// ============================================================================
+// JEPA World-Model Backend Controls
+// ============================================================================
+function onJepaBackendChange() {
+    const isTorch = document.getElementById('jepa-backend').value === 'torch';
+    document.getElementById('jepa-preset').disabled = !isTorch;
+    document.getElementById('jepa-device').disabled = !isTorch;
+    if (!isTorch) document.getElementById('jepa-preset').value = 'default';
+}
+
+function applyJepaBackend() {
+    const backend = document.getElementById('jepa-backend').value;
+    const preset = document.getElementById('jepa-preset').value;
+    const device = document.getElementById('jepa-device').value;
+    const res = document.getElementById('jepa-apply-result');
+    res.style.color = '#9ca3af';
+    res.textContent = 'Applying ' + backend + (backend === 'torch' ? ' / ' + preset : '') + '…';
+    socket.emit('set_jepa_backend', { backend: backend, preset: preset, device: device });
+}
+
+socket.on('jepa_status', (data) => {
+    const res = document.getElementById('jepa-apply-result');
+    if (data && data.ok === false) {
+        res.style.color = '#ef4444';
+        res.textContent = 'Failed: ' + (data.error || 'unknown error');
+    } else if (data && data.ok === true) {
+        res.style.color = '#4ade80';
+        res.textContent = 'Applied.';
+    }
+    updateJepaUI(data);
+});
+
+function updateJepaUI(s) {
+    if (!s) return;
+    const set = (id, v) => {
+        const el = document.getElementById(id);
+        if (el && v !== undefined && v !== null) el.textContent = v;
+    };
+    set('jepa-cfg-backend', s.backend);
+    set('jepa-cfg-device', s.device);
+    set('jepa-cfg-sigreg', s.sigreg_mode);
+    set('jepa-cfg-proj', s.sigreg_projections);
+    set('jepa-cfg-lambda', s.lambda_reg);
+    set('jepa-cfg-latent', s.latent_dim);
+    set('jepa-cfg-steps', s.train_steps);
+    set('jepa-cfg-buffer', s.buffer_size);
+
+    const ind = document.getElementById('jepa-indicator');
+    const txt = document.getElementById('jepa-status-text');
+    if (ind && txt) {
+        if (s.backend === 'torch') {
+            ind.style.background = '#a78bfa';
+            txt.textContent = 'PyTorch · ' + (s.preset || 'default') + ' · ' + (s.device || 'cpu');
+        } else {
+            ind.style.background = '#60a5fa';
+            txt.textContent = 'NumPy (default)';
+        }
+    }
+    // Keep selectors in sync with the live model (e.g. after reconnect).
+    const backendSel = document.getElementById('jepa-backend');
+    if (backendSel && s.backend) { backendSel.value = s.backend; onJepaBackendChange(); }
+    const presetSel = document.getElementById('jepa-preset');
+    if (presetSel && s.preset) presetSel.value = s.preset;
+
+    // Reflect torch availability: disable the option + show install hint.
+    const hint = document.getElementById('jepa-torch-hint');
+    if (s.torch_available === false) {
+        const opt = backendSel && backendSel.querySelector('option[value="torch"]');
+        if (opt) opt.disabled = true;
+        if (hint) hint.textContent = 'PyTorch not installed — run: pip install "torch>=2.2"';
+    } else if (hint) {
+        hint.textContent = '';
+    }
 }
 
 // ============================================================================

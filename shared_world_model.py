@@ -43,27 +43,61 @@ class SharedWorldModel:
                  cem_horizon: int = 2, cem_samples: int = 12,
                  cem_elites: int = 4, cem_iterations: int = 2,
                  max_buffer_size: int = 20000,
-                 seed: int = 0):
+                 seed: int = 0,
+                 backend: str = "numpy",
+                 device: str = "auto", num_threads: int = 1,
+                 sigreg_mode: str = "moments", sigreg_nodes: int = 32,
+                 predictor_dropout: float = 0.0,
+                 target_stop_gradient: bool = False):
         self.obs_dim = obs_dim
         self.action_dim = action_dim
         self.latent_dim = latent_dim
+        self.backend = backend
 
         # Backbone: full JEPA world model. Provides encoder, predictor,
-        # CEM planner, training step (analytic backprop + Adam), metrics.
-        self._jepa = JEPAWorldModel(
-            obs_dim=obs_dim,
-            action_dim=action_dim,
-            latent_dim=latent_dim,
-            hidden_dim=latent_dim * 2,
-            lr=lr,
-            lambda_reg=lambda_reg,
-            sigreg_projections=sigreg_projections,
-            cem_horizon=cem_horizon,
-            cem_samples=cem_samples,
-            cem_elites=cem_elites,
-            cem_iterations=cem_iterations,
-            seed=seed,
-        )
+        # CEM planner, training step, metrics. The torch backend is opt-in
+        # and reproduces the numpy backend's architecture/hyperparameters at
+        # its defaults (see world_model_torch.py).
+        if backend == "numpy":
+            self._jepa = JEPAWorldModel(
+                obs_dim=obs_dim,
+                action_dim=action_dim,
+                latent_dim=latent_dim,
+                hidden_dim=latent_dim * 2,
+                lr=lr,
+                lambda_reg=lambda_reg,
+                sigreg_projections=sigreg_projections,
+                cem_horizon=cem_horizon,
+                cem_samples=cem_samples,
+                cem_elites=cem_elites,
+                cem_iterations=cem_iterations,
+                seed=seed,
+            )
+        elif backend == "torch":
+            from world_model_torch import TorchJEPAWorldModel  # lazy: torch optional
+            self._jepa = TorchJEPAWorldModel(
+                obs_dim=obs_dim,
+                action_dim=action_dim,
+                latent_dim=latent_dim,
+                hidden_dim=latent_dim * 2,
+                lr=lr,
+                lambda_reg=lambda_reg,
+                sigreg_projections=sigreg_projections,
+                cem_horizon=cem_horizon,
+                cem_samples=cem_samples,
+                cem_elites=cem_elites,
+                cem_iterations=cem_iterations,
+                seed=seed,
+                device=device,
+                num_threads=num_threads,
+                sigreg_mode=sigreg_mode,
+                sigreg_nodes=sigreg_nodes,
+                predictor_dropout=predictor_dropout,
+                target_stop_gradient=target_stop_gradient,
+            )
+        else:
+            raise ValueError(f"unknown backend: {backend!r} (expected 'numpy' or 'torch')")
+
         # Override buffer size (shared model needs more capacity)
         self._jepa.max_buffer_size = max_buffer_size
 

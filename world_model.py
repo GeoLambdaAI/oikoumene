@@ -15,7 +15,7 @@ Key components:
 
 Notes on the v0.2 rewrite (replacing the random-perturbation gradients of v0.1):
 - All backward passes are analytic and verified by finite-difference gradient
-  check (see test_layers_gradcheck.py). Relative error < 1e-10.
+  check (see test_world_model_gradcheck.py). Relative error < 1e-8.
 - AdaLN parameters (W_ada1_scale, W_ada1_shift, W_ada2_scale, W_ada2_shift)
   are now in the trainable parameter set — previously they were not.
 - SIGReg gradients propagate into the loss — previously the regularizer was

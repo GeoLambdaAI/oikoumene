@@ -19,18 +19,23 @@ Each autonomous agent uses a JEPA world model (LeCun 2022; Maes et al. 2026) to 
 [![Tests](https://github.com/GeoLambdaAI/world-genesis/actions/workflows/test.yml/badge.svg)](https://github.com/GeoLambdaAI/world-genesis/actions/workflows/test.yml)
 [![DOI](https://img.shields.io/badge/DOI-pending-lightgrey.svg)](https://www.geolambda.ai)
 
-> **Status:** v0.3.0 — empirical-data & validation release, with substantial
-> unreleased work toward v0.4 (see the `[Unreleased]` section of
-> [CHANGELOG.md](CHANGELOG.md)): anthropogenic CO₂ now scales with the
-> civilization's industrialisation (with a continuous paleo→Industrial climate
-> handoff), seeded-RNG reproducibility, engine hardening (agent/settlement
-> pruning, conservative economy), and performance vectorisation that removed the
-> periodic per-tick stalls. v0.2.x were calibration releases that fixed
-> scientific-constant, coupling, and timing bugs; v0.3.0 added the empirical-input
-> pipeline and Sobol sensitivity analysis. See [CHANGELOG.md](CHANGELOG.md) for
-> the full history. The `Built primarily with Claude Code` framing in the header
-> applies to the v0.1.0 generation; subsequent calibration/feature passes were
-> human-led reviews with LLM assistance.
+> **Status:** v0.3.0 — added the optional **PyTorch JEPA backend** (paper-aligned
+> toggles, NumPy/Torch parity tests). Substantial **unreleased work toward v0.4**
+> is in the `[Unreleased]` section of [CHANGELOG.md](CHANGELOG.md):
+> - the **empirical-input download pipeline** (CHELSA, SoilGrids, ETOPO, HYDE,
+>   UCDP-GED, HadCRUT5) and **Sobol sensitivity analysis** — the downloaders and
+>   their tests are implemented, but the runtime **ingestion is not yet wired**
+>   (the simulation still runs on the synthetic `data/earth_*.npy` grids);
+> - **anthropogenic CO₂ coupled to the civilization's industrialisation** (with a
+>   continuous paleo→Industrial climate handoff), **seeded-RNG reproducibility**,
+>   engine hardening (agent/settlement pruning, conservative economy), and
+>   performance vectorisation that removed the periodic per-tick stalls.
+>
+> v0.2.x were calibration releases that fixed scientific-constant, coupling, and
+> timing bugs. See [CHANGELOG.md](CHANGELOG.md) for the full history. The
+> `Built primarily with Claude Code` framing in the header applies to the v0.1.0
+> generation; subsequent calibration/feature passes were human-led reviews with
+> LLM assistance.
 > 
 > **Tested on:**
 > - Ubuntu 22.04 ARM, Python 3.11.

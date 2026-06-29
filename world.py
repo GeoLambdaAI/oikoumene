@@ -306,7 +306,9 @@ class Settlement:
     """A cluster of agents forming a community."""
     _next_id = 0
 
-    def __init__(self, lat: float, lng: float, founder_id: int):
+    def __init__(self, lat: float, lng: float, founder_id: int,
+                 rng: Optional[np.random.RandomState] = None):
+        self.rng = rng if rng is not None else np.random
         Settlement._next_id += 1
         self.id = Settlement._next_id
         self.lat = lat
@@ -334,7 +336,7 @@ class Settlement:
                      "Gold", "Silver", "Crystal", "Shadow", "Sun", "Star"]
         suffixes = ["haven", "burg", "ton", "dale", "ford", "bridge", "gate",
                      "wood", "field", "peak", "vale", "shore", "hollow"]
-        return np.random.choice(prefixes) + np.random.choice(suffixes)
+        return self.rng.choice(prefixes) + self.rng.choice(suffixes)
 
     def update(self, agents: list):
         self.age += 1
@@ -400,6 +402,11 @@ class World:
         self.seed = seed
         self.config = config or {}
         self.rng = np.random.RandomState(seed)
+        # Reset class-level entity ID counters so a fixed seed yields identical
+        # IDs across runs (one World per process; IDs are otherwise monotonic
+        # across instances and would break same-process reproducibility).
+        Agent._next_id = 0
+        Settlement._next_id = 0
         self.tick = 0
         self.cell_size_deg = cell_size_deg
 
@@ -407,6 +414,11 @@ class World:
         self.scenario = SCENARIOS.get(scenario_id, SCENARIOS["historical"])
         self.scenario_loader = ScenarioLoader()
         self.macro_always_active = self.scenario.macro_active_from_start
+        # One-time flag: in a historical run the macro ODE is dormant during the
+        # paleo era and must be seeded from the paleoclimate trajectory the first
+        # time it activates (Industrial era), so climate hands off continuously
+        # instead of snapping to the present-day defaults baked into MacroState.
+        self._macro_handed_off = self.macro_always_active
 
         # Generate Earth terrain grid
         self.earth_grid = generate_earth_grid(
@@ -521,7 +533,7 @@ class World:
             spawn_points = find_land_spawn_points(count, self.seed)
 
         for lat, lng in spawn_points:
-            agent = Agent(lat, lng)
+            agent = Agent(lat, lng, rng=self.rng)
             agent.energy = 80 + self.rng.random() * 20
             agent.wealth = 10 + self.rng.random() * 20
             self.agents.append(agent)
@@ -651,7 +663,7 @@ class World:
             if len(nearby_unaffiliated) >= 4:
                 cx = np.mean([a.lat for a in nearby_unaffiliated + [agent]])
                 cy = np.mean([a.lng for a in nearby_unaffiliated + [agent]])
-                settlement = Settlement(cx, cy, agent.id)
+                settlement = Settlement(cx, cy, agent.id, rng=self.rng)
                 for a in nearby_unaffiliated:
                     settlement.members.add(a.id)
                 self.settlements.append(settlement)
@@ -691,7 +703,7 @@ class World:
                 lat = wave_lat + self.rng.normal(0, 3)
                 lng = wave_lng + self.rng.normal(0, 3)
                 if is_land(lat, lng) and not self.history.paleoclimate.get_ice_mask(year_bp, lat, lng):
-                    agent = Agent(lat, lng)
+                    agent = Agent(lat, lng, rng=self.rng)
                     agent.energy = 80 + self.rng.random() * 20
                     agent.wealth = 5 + self.rng.random() * 10
                     self.agents.append(agent)
@@ -753,48 +765,53 @@ class World:
             res._baseline_water = res.water.copy()
             res._was_iced = np.zeros((res.rows, res.cols), dtype=bool)
 
-        for r in range(res.rows):
-            lat = res.lat_max - (r + 0.5) * res.cell_size_deg
-            for c in range(res.cols):
-                lng = res.lng_min + (c + 0.5) * res.cell_size_deg
+        # Vectorised ice-sheet application. This was a per-cell Python double loop
+        # that called get_ice_mask() — which itself recomputes the climate — for
+        # every one of the ~12k grid cells, costing ~0.29 s every 50 ticks and
+        # throttling the sim through the glacial paleo era. The numpy form below is
+        # cell-for-cell identical but runs in well under a millisecond.
+        rows, cols = res.rows, res.cols
+        lat = (res.lat_max - (np.arange(rows) + 0.5) * res.cell_size_deg)[:, None]  # (rows,1)
+        lng = (res.lng_min + (np.arange(cols) + 0.5) * res.cell_size_deg)[None, :]  # (1,cols)
 
-                if self.history.paleoclimate.get_ice_mask(year_bp, lat, lng):
-                    # Currently under ice: zero biological productivity
-                    # (preserves original semantics). Mark for recovery
-                    # tracking.
-                    res.food[r, c] = 0
-                    res.food_regen[r, c] = 0
-                    res.wood[r, c] = 0
-                    res.wood_regen[r, c] = 0
-                    res.water[r, c] = 0
-                    res._was_iced[r, c] = True
-                else:
-                    # Post-glacial recovery: cell just transitioned out of
-                    # ice. Seed levels at a fraction of baseline so natural
-                    # regen via ResourceMap.regenerate() refills them over
-                    # subsequent ticks. Water recovers fastest (meltwater
-                    # is immediately available); vegetation needs time to
-                    # recolonize. Fractions are heuristic; what matters
-                    # scientifically is that cells *can* recover at all.
-                    if res._was_iced[r, c]:
-                        res.food[r, c] = res._baseline_food[r, c] * 0.1
-                        res.wood[r, c] = res._baseline_wood[r, c] * 0.1
-                        res.water[r, c] = res._baseline_water[r, c] * 0.5
-                        res._was_iced[r, c] = False
+        # Whole-grid ice mask, matching PaleoclimateModel.get_ice_mask: no extra
+        # ice when warmer than -2 deg C; otherwise continental ice sheets (whose
+        # southern boundary moves with ice_scale) plus the Antarctic sheet.
+        ice = np.zeros((rows, cols), dtype=bool)
+        if temp_offset <= -2.0:
+            ice_scale = float(np.clip(-temp_offset / 8.0, 0, 1))
+            for extent in self.history.paleoclimate.LGM_ICE_EXTENT.values():
+                boundary = 75.0 - (75.0 - extent["lat_south"]) * ice_scale
+                in_lng = (lng >= extent["lng_min"]) & (lng <= extent["lng_max"])
+                ice |= in_lng & (lat >= boundary)
+            antarctic_boundary = -65.0 + 10.0 * ice_scale
+            ice |= lat <= antarctic_boundary
+        not_ice = ~ice
 
-                    # Set regen rates from baseline (idempotent). This is
-                    # the fix for bug (i): the previous `*=` was replaced
-                    # with `= baseline *`, so cold_factor no longer
-                    # accumulates across ticks.
-                    res.food_regen[r, c] = (
-                        res._baseline_food_regen[r, c] * cold_factor
-                    )
-                    # Restore wood_regen unconditionally; the under-ice
-                    # branch zeros it, and without restoration a cell
-                    # that ever iced over would lose wood productivity
-                    # permanently. wood_regen is not cold-scaled in the
-                    # original model, so we use the bare baseline.
-                    res.wood_regen[r, c] = res._baseline_wood_regen[r, c]
+        # Recovery applies to cells iced on a previous call that are now ice-free
+        # (computed before _was_iced is updated below).
+        recovered = not_ice & res._was_iced
+
+        # Under ice: zero biological productivity; mark for recovery tracking.
+        res.food[ice] = 0
+        res.food_regen[ice] = 0
+        res.wood[ice] = 0
+        res.wood_regen[ice] = 0
+        res.water[ice] = 0
+        res._was_iced[ice] = True
+
+        # Post-glacial recovery on the iced->non-iced transition: seed a fraction
+        # of baseline so natural regen refills the cell over subsequent ticks.
+        res.food[recovered] = res._baseline_food[recovered] * 0.1
+        res.wood[recovered] = res._baseline_wood[recovered] * 0.1
+        res.water[recovered] = res._baseline_water[recovered] * 0.5
+        res._was_iced[recovered] = False
+
+        # Non-iced cells: rebuild regen from baselines (idempotent, non-ratcheting
+        # — the fix for bug (i)). cold_factor scales food regen; wood regen is the
+        # bare baseline (not cold-scaled in the original model).
+        res.food_regen[not_ice] = res._baseline_food_regen[not_ice] * cold_factor
+        res.wood_regen[not_ice] = res._baseline_wood_regen[not_ice]
 
     @staticmethod
     def _distance_deg(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
@@ -870,9 +887,16 @@ class World:
         for biz in self.businesses:
             biz.operate(self)
 
-        # Update settlements
+        # Update settlements, then prune dead ones (population 0 = no living
+        # members). Settlements form throughout the 68,000-year paleo era and were
+        # never removed, so the list grew without bound — making both this per-tick
+        # loop and the geopolitics update (each O(settlements x agents)) progressively
+        # slower, and causing an abrupt stall when geopolitics first activates in the
+        # Industrial era and processes the whole accumulated backlog at once.
         for settlement in self.settlements:
             settlement.update(self.agents)
+        if self.settlements:
+            self.settlements = [s for s in self.settlements if s.population > 0]
 
         # Check for new settlements
         self._check_settlement_formation()
@@ -922,13 +946,35 @@ class World:
         # ---- Macro + Geopolitics integration (every N ticks) ----
         # Macro ODE system: active from start in present_day scenario, else Industrial+ era
         is_modern = self.macro_always_active or self.history.year_bp < 200
+
+        # Continuous handoff: the moment a historical run first enters the
+        # Industrial era, seed the macro state from the paleoclimate trajectory so
+        # temperature/CO2/population carry over smoothly instead of snapping to the
+        # present-day MacroState defaults. This MUST run on the first modern tick
+        # regardless of the macro update cadence — otherwise, on modern ticks that
+        # are not multiples of macro_update_interval, the era-aware summary would
+        # read the un-seeded (present-day) macro state and briefly flash 2026.
+        if is_modern and not self._macro_handed_off:
+            self._hand_off_macro_from_paleo()
+            self._macro_handed_off = True
+
         if self.tick % self.macro_update_interval == 0 and is_modern:
             # 1. Aggregate agent actions -> macro feedback
             feedback = self.bridge.aggregate_agent_feedback(
                 self.agents, self.businesses, self.settlements
             )
+
             # Inject conflict intensity from geopolitics
             feedback["conflict_intensity"] = self.geopolitics.get_conflict_intensity()
+
+            # Anthropogenic CO2 scales with the civilization's industrial
+            # development: present-day scenarios start fully industrial; historical
+            # runs ramp up as the civ discovers industrial technologies (so a
+            # low/pre-industrial civ produces little fossil CO2).
+            feedback["industrialization"] = (
+                1.0 if self.macro_always_active
+                else self.history.industrialization_level()
+            )
 
             # 2. Advance macro model by one step
             self.macro.step(feedback)
@@ -966,7 +1012,10 @@ class World:
         stats = {
             "tick": self.tick,
             "population": len(alive_agents),
-            "total_born": len(self.agents),
+            # total_born is the per-world monotonic Agent ID counter (reset in
+            # World.__init__), so it stays correct even after dead agents are
+            # pruned from self.agents below.
+            "total_born": Agent._next_id,
             "avg_energy": float(np.mean([a.energy for a in alive_agents])) if alive_agents else 0,
             "avg_wealth": float(np.mean([a.wealth for a in alive_agents])) if alive_agents else 0,
             "avg_happiness": float(np.mean([a.happiness for a in alive_agents])) if alive_agents else 0,
@@ -988,7 +1037,45 @@ class World:
         # Scientific logging
         self.logger.log_tick(self, stats)
 
+        # Prune dead agents so self.agents stays O(alive): unbounded growth over
+        # long historical runs is both a memory leak and an O(total-born) cost in
+        # every per-tick loop. Dead agents carry no behaviour; relationships and
+        # settlement membership reference agent IDs, not list positions.
+        if len(self.agents) != len(alive_agents):
+            self.agents = [a for a in self.agents if a.alive]
+
         return stats
+
+    def _hand_off_macro_from_paleo(self) -> None:
+        """Seed the macro ODE from the paleoclimate trajectory at Industrial onset.
+
+        In a historical run the macro model is dormant through the paleo era; when
+        it first activates it would otherwise start from the present-day MacroState
+        defaults (1.3 deg C, 425 ppm), producing a sharp discontinuity. Instead we
+        hand off continuously: climate carries the lower paleo values forward, the
+        socioeconomic state is reset to pre-industrial, and the macro then evolves
+        the climate upward as the civilization industrialises (emissions are
+        gated by industrialization_level()).
+        """
+        climate = self.history.paleoclimate.get_climate(self.history.year_bp)
+        s = self.macro.state
+
+        # Climate continuity (no jump): carry the paleo values forward.
+        s.year = self.history.get_current_year_ce()
+        s.co2_ppm = float(climate["co2_ppm"])
+        s.temperature_anomaly = float(climate["temperature_anomaly"])
+        s.deep_ocean_temp = float(climate["temperature_anomaly"]) * 0.2  # deep ocean lags
+        s.sea_level_rise_m = max(0.0, float(climate["sea_level_m"]))
+
+        # Pre-industrial socioeconomic state at handoff (Industrial onset).
+        s.global_population_billions = float(_paleo_population_billions(self.history.year_bp))
+        s.global_gdp_index = max(0.02, s.global_population_billions / 8.1)  # pre-industrial economy
+        s.fossil_fuels = 1.0          # reserves untapped before industry
+        s.minerals_global = 1.0
+        s.renewable_fraction = 0.0    # no industrial energy infrastructure yet
+        s.persistent_pollution = 0.0
+        s.ocean_acidification = 0.0
+        s.technology_level = 1.0      # neutral emission-intensity baseline; grows from here
 
     # ------------------------------------------------------------------
     # Serialization
@@ -1044,9 +1131,19 @@ class World:
             n_techs = len(self.history.discovered_techs)
             tech_tree_size = max(1, len(getattr(self.history, "tech_tree", []))
                                   or 32)  # 32 = current TECH_TREE size
+            # Early-Anthropocene land-use signal (Ruddiman 2003): the simulated
+            # civilisation's settled footprint nudges CO2 slightly above the
+            # natural paleoclimate baseline, so a growing pre-industrial civ has a
+            # small but visible climate effect (the macro ODE is dormant in the
+            # paleo era). Capped at a few ppm — this is land use, not fossil fuel.
+            settled_footprint = min(1.0, len(self.settlements) / 40.0)
+            land_use_co2_ppm = round(12.0 * settled_footprint, 2)
+            paleo_co2 = round(climate["co2_ppm"] + land_use_co2_ppm, 1)
             macro_summary = {
                 "year": round(self.history.get_current_year_ce(), 1),
-                "co2_ppm": round(climate["co2_ppm"], 1),
+                "co2_ppm": paleo_co2,
+                "co2_natural_ppm": round(climate["co2_ppm"], 1),
+                "anthropogenic_co2_ppm": land_use_co2_ppm,
                 "temperature": round(climate["temperature_anomaly"], 2),
                 "sea_level_m": round(climate["sea_level_m"], 3),
                 "population_B": round(
@@ -1057,6 +1154,8 @@ class World:
                 "pollution": 0.0,           # Pre-industrial atmosphere
                 "technology": round(min(1.0, n_techs / tech_tree_size), 3),
             }
+            # Reflect the civ's land-use effect in the history panel too.
+            history_summary["co2_ppm"] = paleo_co2
 
         geopolitics_summary = self.geopolitics.get_summary()
         geopolitics_summary["settlements"] = len(self.settlements)

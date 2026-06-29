@@ -33,8 +33,9 @@ following established gravity-model and International Futures specifications.
 
 The simulator ships with two scenarios. *Scenario A* runs from the
 Out-of-Africa migration ~70,000 years before present through to climate
-futures beyond 2100, integrating paleoclimate from EPICA ice cores and
-geographic determinism in the sense of @diamond1997guns. *Scenario B*
+futures beyond 2100, integrating paleoclimate from EPICA ice cores
+[@luthi2008high; @epica2004eight] and geographic determinism in the sense of
+@diamond1997guns. *Scenario B*
 initialises from present-day data (World Bank, NOAA, NASA) and projects
 forward at monthly resolution. Every parameter, equation, and boundary
 condition is grounded in published literature, and the macro layer passes

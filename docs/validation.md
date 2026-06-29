@@ -1,6 +1,6 @@
 # Validation Report — World Genesis Macro Model
 
-**Version:** 0.2.1
+**Version:** 0.3.0
 **Date of validation run:** 2026-05-06
 **Seed:** deterministic (no stochastic terms in BAU macro path)
 **Reproduction:** `python test_macro.py`
@@ -35,7 +35,7 @@ calibration as it now lives.
 
 The macro module is run **without agent feedback** (`bau_feedback = {}`),
 isolating the closed-form ODE behaviour from the agent layer. State variables
-are recorded every simulated year. The eight target metrics are evaluated at
+are recorded every simulated year. The nine target metrics are evaluated at
 year 2100 against tolerance bands chosen to span the IPCC AR6
 SSP2-4.5 → SSP3-7.0 plausibility envelope. The BAU path falls inside this
 envelope because renewable transition is endogenous and Hubbert depletion
@@ -57,6 +57,15 @@ limits late-century fossil burn.
 | — | Emergent ECS vs. declared | **3.00 °C** | drift < 2 % | F<sub>2x</sub>/λ = 5.35·ln 2 / 1.236 = 3.00 °C exactly | PASS |
 
 **Overall: 9 / 9 SSP-envelope checks plus 2 unit anchors pass.**
+
+> **What this does and does not show.** These are *calibration-consistency*
+> checks: the macro coefficients were tuned so the BAU path lands inside the
+> SSP2-4.5 → SSP3-7.0 plausibility envelope, and the bands are deliberately wide
+> (they span multiple SSPs). Passing therefore demonstrates that the model is
+> internally consistent and qualitatively faithful to the IPCC AR6 envelope —
+> **not** independent out-of-sample predictive skill. The genuinely constraining
+> anchors are the dCO₂/dt ≈ 2030 rate and the emergent-ECS consistency check.
+> See §5 for the explicit calibration caveats.
 
 ## 4. Trajectory excerpts (5-year increments)
 
@@ -93,9 +102,9 @@ Full per-year trace is reproducible via `python test_macro.py | tee logs/validat
    centuries depending on era), latent population scale (hundreds to thousands
    of agents representing billions of humans), and grid resolution (0.5°).
    Concrete examples: the DICE damage coefficient `a = 0.01` in
-   [`macro.py:388`](../macro.py#L388) (vs. published DICE-2016R `a ≈ 0.00236`)
+   [`macro.py:407`](../macro.py#L407) (vs. published DICE-2016R `a ≈ 0.00236`)
    reflects the simulator's accelerated time step; Hubbert depletion timescales
-   in [`macro.py:305-320`](../macro.py#L305-L320) are scaled to scenario
+   in [`macro.py:324`](../macro.py#L324) are scaled to scenario
    duration rather than transcribed from Hubbert (1956). Reviewers should
    treat the simulator as a *qualitatively faithful* implementation rather
    than a coefficient-by-coefficient replica.
@@ -126,7 +135,99 @@ Full per-year trace is reproducible via `python test_macro.py | tee logs/validat
    exact published coefficients are not fully available, so the calibration
    in [`macro.py:192-200`](../macro.py#L192-L200) is bespoke.
 
-## 6. How to reproduce
+## 6. Parameter sensitivity (Sobol decomposition)
+
+A global, variance-based sensitivity analysis ([Sobol 1993](
+https://www.tandfonline.com/doi/abs/10.1080/00401706.1991.10484804); Saltelli
+et al. 2010) was run on the 2100 BAU outputs to identify which model
+parameters dominate the uncertainty of the headline projections. The
+analysis varies **eight parameters** within IPCC AR6 / Friedlingstein 2024 /
+UN WPP literature ranges (see priors below) and computes first-order (S1)
+and total (ST) Sobol indices via SALib's Saltelli sampler.
+
+Run via [`scripts/sensitivity.py`](../scripts/sensitivity.py)
+(requires `pip install -e ".[sensitivity]"`).
+
+### 6.1 Parameter priors (flat U(lo, hi))
+
+| Parameter | Bounds | Source |
+|---|---|---|
+| `FORCING_COEFF` (F<sub>2x</sub>) | 5.00–5.70 W m<sup>-2</sup> | Myhre 1998 1-σ |
+| `CLIMATE_FEEDBACK` (λ) | 0.80–1.60 W m<sup>-2</sup> K<sup>-1</sup> | IPCC AR6 likely (gives ECS ≈ 2.3–4.6 °C) |
+| `OCEAN_HEAT_CAPACITY` | 5.0–10.0 W·yr m<sup>-2</sup> K<sup>-1</sup> | Held et al. 2010 |
+| `DEEP_OCEAN_COUPLING` | 0.50–1.00 W m<sup>-2</sup> K<sup>-1</sup> | Gregory 2000 |
+| `NATURAL_ABSORPTION_RATE` | 0.40–0.60 | Friedlingstein 2024 decadal |
+| `ABSORPTION_TEMP_SENSITIVITY` | 0.03–0.10 K<sup>-1</sup> | sink-weakening uncertainty |
+| `BASE_EMISSION_RATE` | 38.0–46.0 GtCO<sub>2</sub>/yr | GCP 2024 ± 10 % |
+| `POP_GROWTH_BASE` | 0.005–0.013 yr<sup>-1</sup> | UN WPP envelope |
+
+### 6.2 Sobol indices (N = 64, 1 152 BAU evaluations)
+
+| Parameter | T<sub>2100</sub> S1 | T<sub>2100</sub> ST | CO₂<sub>2100</sub> S1 | CO₂<sub>2100</sub> ST | Pop<sub>2100</sub> S1 | Pop<sub>2100</sub> ST |
+|---|---|---|---|---|---|---|
+| `FORCING_COEFF` | +0.04 | +0.06 | -0.00 | +0.00 | +0.02 | +0.06 |
+| **`CLIMATE_FEEDBACK`** | **+0.82** | **+0.79** | +0.01 | +0.01 | **+0.58** | **+0.67** |
+| `OCEAN_HEAT_CAPACITY` | +0.00 | +0.00 | -0.00 | +0.00 | +0.00 | +0.00 |
+| `DEEP_OCEAN_COUPLING` | +0.05 | +0.07 | +0.00 | +0.00 | +0.07 | +0.10 |
+| **`NATURAL_ABSORPTION_RATE`** | +0.05 | +0.05 | **+0.62** | **+0.60** | +0.04 | +0.03 |
+| `ABSORPTION_TEMP_SENSITIVITY` | +0.01 | +0.00 | +0.04 | +0.03 | +0.00 | +0.00 |
+| **`BASE_EMISSION_RATE`** | +0.01 | +0.01 | **+0.19** | **+0.17** | -0.01 | +0.01 |
+| `POP_GROWTH_BASE` | +0.00 | +0.00 | +0.00 | +0.00 | +0.06 | **+0.20** |
+
+S1 = first-order index (variance share explained by the parameter alone).
+ST = total index (S1 + interaction effects). Bold entries indicate parameters
+that explain ≥10 % of the variance in the corresponding output. Negative-
+but-near-zero values reflect Monte-Carlo noise at this N; treat |S1| < 0.05
+as not significant. Full results with 95 % confidence intervals in
+[`scripts/results/sensitivity_N64.json`](../scripts/results/sensitivity_N64.json).
+
+### 6.3 What this tells us
+
+- **2100 temperature is overwhelmingly driven by the climate feedback
+  parameter λ** (ST ≈ 0.79). Forcing-coefficient and deep-ocean-coupling
+  uncertainty add only ~6 % each; everything else is in the noise. This is
+  consistent with IAM literature where ECS dominates end-of-century ΔT
+  uncertainty.
+- **2100 CO₂ is driven mainly by the natural sink fraction** (ST ≈ 0.60)
+  with baseline emissions a clear secondary (ST ≈ 0.17). Together these
+  explain ~80 % of the projected CO₂ variance; sink weakening with warming
+  contributes a further ~3 %. λ does *not* directly drive 2100 CO₂ — the
+  carbon cycle and the energy balance are largely decoupled at this scale
+  in the macro layer.
+- **2100 population variance is dominated by climate feedback** (ST ≈ 0.67)
+  with the population-growth rate a smaller direct contributor (S1 ≈ 0.06)
+  but a substantial interaction contributor (ST ≈ 0.20, i.e. its effect is
+  conditioned on the realised climate). This is the DICE-damage channel:
+  warmer worlds reduce GDP and demography downstream.
+- **`OCEAN_HEAT_CAPACITY` and `ABSORPTION_TEMP_SENSITIVITY` are essentially
+  inactive at the 2100 horizon.** They could likely be fixed at their
+  central values without measurable loss of fidelity, simplifying any
+  future Bayesian-calibration / SBI sweep.
+
+### 6.4 Caveats
+
+- N = 64 (1 152 evaluations) gives stable rank ordering but the second-
+  decimal of each index is still noisy (typical 95 % CI half-width ~0.05
+  for the dominant terms; see the JSON). For publication-grade indices
+  rerun with `--n 256` (≈ 18 min).
+- Priors are flat over the published 1-σ / likely ranges. A more
+  defensible prior set would use the IPCC AR6 ECS posterior shape (skewed,
+  long upper tail) for `CLIMATE_FEEDBACK`; this is the natural next step
+  via the SBI pipeline discussed in §5.
+- The parameter ranges treat F<sub>2x</sub> and λ as independent, while in
+  practice they are correlated through ECS observations. A Sobol design
+  with the constraint `ECS = F_2x ln 2 / λ ∈ [2.5, 4.5]` would tighten the
+  joint range.
+
+### 6.5 How to reproduce the sensitivity run
+
+```bash
+pip install -e ".[sensitivity]"
+python scripts/sensitivity.py --n 64      # ~5 min on commodity CPU
+# results: scripts/results/sensitivity_N64.json + stdout markdown table
+```
+
+## 7. How to reproduce
 
 ```bash
 # Clean checkout
@@ -139,9 +240,11 @@ pip install -r requirements.txt
 python test_macro.py
 ```
 
-Expected exit code: `0`. Expected stdout final line: `ALL VALIDATIONS PASSED!`.
+Expected exit code: `0`. Expected stdout final line: `OVERALL: ALL PASS`
+(preceded by `ALL VALIDATIONS PASSED`). The same checks also run under
+`pytest` via `test_bau_scenario_ipcc_envelope`.
 
-## 7. References
+## 8. References
 
 See [`paper/paper.bib`](../paper/paper.bib) for the bibliographic entries
 backing each calibration target.

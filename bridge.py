@@ -218,85 +218,60 @@ class MacroAgentBridge:
 
         rows, cols = terrain.shape
 
-        for r in range(rows):
-            lat = resource_map.lat_max - (r + 0.5) * resource_map.cell_size_deg
-            abs_lat = abs(lat)
+        # Vectorised macro -> resource translation. This was a per-cell Python
+        # double loop (~8.5 ms over the 12k-cell grid) that ran every macro tick
+        # once the Industrial era activated the macro layer, throttling the sim.
+        # The numpy form below is numerically identical, cell-for-cell, but runs
+        # in microseconds. Ocean cells (terrain code 0) are left untouched, exactly
+        # as the original `continue` did.
+        land = terrain != 0
+        abs_lat = np.abs(
+            resource_map.lat_max - (np.arange(rows) + 0.5) * resource_map.cell_size_deg
+        )[:, None]  # (rows, 1), broadcasts across columns
 
-            for c in range(cols):
-                t_type = terrain[r, c]
+        # --- Temperature impact on fertility (latitude-banded) ---
+        # Source: Schlenker & Roberts 2009, IPCC AR6 WG2 Ch5. Each band value is a
+        # scalar function of T, selected per row by absolute latitude.
+        tf_tropical = max(0.3, 1.0 - 0.15 * max(0.0, T - 1.5) ** 1.3)
+        tf_temperate = (1.0 + 0.05 * T) if T < 1.5 \
+            else max(0.4, 1.075 - 0.08 * (T - 1.5) ** 1.5)
+        tf_subarctic = min(1.3, 1.0 + 0.1 * T)
+        tf_arctic = max(0.5, 1.0 - 0.05 * max(0.0, T - 2.0))
+        temp_factor = np.broadcast_to(
+            np.select(
+                [abs_lat < 20, abs_lat < 45, abs_lat < 60],
+                [tf_tropical, tf_temperate, tf_subarctic],
+                default=tf_arctic,
+            ).astype(np.float64),
+            (rows, cols),
+        ).copy()
 
-                # Skip ocean
-                if t_type == 0:
-                    continue
+        # --- Sea level rise: flood low-elevation cells (IPCC AR6 WG1 Ch9) ---
+        if slr > 0.3:
+            flood_prob = min(1.0, (slr - 0.3) / 0.5)
+            if flood_prob > 0.5:
+                temp_factor[elevation < 0.15] *= max(0.1, 1.0 - flood_prob)
 
-                elev = elevation[r, c]
+        # --- Pollution impact on food regen (World3, Meadows 2004); scalar ---
+        pollution_factor = max(0.4, 1.0 - 0.4 * pollution)
 
-                # --- Temperature impact on fertility ---
-                # Source: Schlenker & Roberts 2009, IPCC AR6 WG2 Ch5
-                if abs_lat < 20:
-                    # Tropical: strongly affected above 1.5C
-                    temp_factor = max(0.3, 1.0 - 0.15 * max(0, T - 1.5) ** 1.3)
-                elif abs_lat < 45:
-                    # Temperate: slight benefit then decline
-                    # Optimal warming ~1C, damage above 2C
-                    if T < 1.5:
-                        temp_factor = 1.0 + 0.05 * T  # Slight benefit
-                    else:
-                        temp_factor = max(0.4, 1.075 - 0.08 * (T - 1.5) ** 1.5)
-                elif abs_lat < 60:
-                    # Subarctic: benefits from warming initially
-                    temp_factor = min(1.3, 1.0 + 0.1 * T)
-                else:
-                    # Arctic/Antarctic: permafrost thaw effects
-                    temp_factor = max(0.5, 1.0 - 0.05 * max(0, T - 2.0))
+        # --- Freshwater stress -> water regen; arid terrain hit hardest ---
+        # Source: Schewe et al. 2014. Desert (4) / Plains (1) / other terrain.
+        water_factor = np.where(
+            terrain == 4, max(0.2, 1.0 - 0.8 * freshwater),
+            np.where(terrain == 1, max(0.5, 1.0 - 0.4 * freshwater),
+                     max(0.6, 1.0 - 0.2 * freshwater)),
+        )
 
-                # --- Pollution impact on food regen ---
-                # Source: World3 pollution-agriculture link (Meadows 2004)
-                pollution_factor = max(0.4, 1.0 - 0.4 * pollution)
-
-                # --- Sea level rise: flood low-elevation coastal cells ---
-                # Source: IPCC AR6 WG1 Ch9
-                if elev < 0.15 and slr > 0.3:
-                    flood_prob = min(1.0, (slr - 0.3) / 0.5)
-                    if flood_prob > 0.5:
-                        # Severe flooding -> reduce all resources dramatically
-                        temp_factor *= max(0.1, 1.0 - flood_prob)
-
-                # --- Freshwater stress ---
-                # Source: Schewe et al. 2014
-                # Arid regions hit hardest
-                if t_type == 4:  # Desert
-                    water_factor = max(0.2, 1.0 - 0.8 * freshwater)
-                elif t_type == 1:  # Plains
-                    water_factor = max(0.5, 1.0 - 0.4 * freshwater)
-                else:
-                    water_factor = max(0.6, 1.0 - 0.2 * freshwater)
-
-                # --- Apply combined modifier to regeneration rates ---
-                combined = temp_factor * pollution_factor * water_factor
-
-                # Scale food regeneration. FIX: previous code used the
-                # simplified `(2.0 if plains else 1.0) * fertility` baseline,
-                # which silently boosted food_regen by 5x on mountain, 10x on
-                # desert, 3.3x on tundra relative to the per-terrain factors
-                # used in ResourceMap.initialize_from_terrain. We now use the
-                # derived per-terrain * fertility baseline cached on first call.
-                resource_map.food_regen[r, c] = (
-                    self._base_food_regen[r, c] * combined
-                )
-
-                # Water regeneration scaled relative to the original baseline
-                # (FIX B1: was `*= water_factor`, which compounded across calls
-                # and drove water_regen monotonically to zero).
-                resource_map.water_regen[r, c] = (
-                    self._base_water_regen[r, c] * water_factor
-                )
-
-                # Mineral availability scales with global remaining stock,
-                # again rebuilt from the baseline rather than ratcheted.
-                resource_map.minerals_regen[r, c] = (
-                    self._base_minerals_regen[r, c] * mineral_remaining
-                )
+        # --- Rebuild regen rates from cached baselines (no compounding) ---
+        # food_regen baseline is the derived per-terrain * fertility grid; water
+        # and minerals from their snapshots. Only land cells are written.
+        combined = temp_factor * pollution_factor * water_factor
+        resource_map.food_regen[land] = self._base_food_regen[land] * combined[land]
+        resource_map.water_regen[land] = self._base_water_regen[land] * water_factor[land]
+        resource_map.minerals_regen[land] = (
+            self._base_minerals_regen[land] * mineral_remaining
+        )
 
         # --- Global resource capacity scaling ---
         # As global stocks deplete, local max capacity also drops
@@ -361,11 +336,12 @@ class MacroAgentBridge:
             for agent in alive:
                 dist = world._distance_deg(agent.lat, agent.lng, zone_lat, zone_lng)
                 if dist < zone_radius:
-                    # Proximity-scaled damage
+                    # Proximity-scaled damage (clamped so conflict never drives
+                    # vitals negative; this runs after the agent's own update()).
                     proximity = 1.0 - dist / zone_radius
-                    agent.health -= 2.0 * intensity * proximity
-                    agent.wealth -= 1.0 * intensity * proximity
-                    agent.happiness -= 3.0 * intensity * proximity
+                    agent.health = max(0.0, agent.health - 2.0 * intensity * proximity)
+                    agent.wealth = max(0.0, agent.wealth - 1.0 * intensity * proximity)
+                    agent.happiness = max(0.0, agent.happiness - 3.0 * intensity * proximity)
 
         # Technology diffusion: agents in nations with high tech benefit
         for agent in alive:

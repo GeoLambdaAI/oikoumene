@@ -211,11 +211,16 @@ class PaleoclimateModel:
         (4000,      270,    0.0,    -2),     # Neoglaciation begins
         (2000,      275,   -0.2,    0),      # Roman Warm Period
         (1000,      280,   -0.1,    0),      # Medieval Warm Period
-        (500,       280,   -0.5,    0),      # Little Ice Age
-        (200,       285,   -0.3,    0),      # End of Little Ice Age
-        (75,        310,    0.0,    0),       # Mid-20th century (1950 = 0 BP)
-        (0,         420,    1.2,    0.15),   # ~2024 CE (present)
+        (500,       280,   -0.5,    0),      # Little Ice Age depths (1450 CE)
+        (200,       283,   -0.3,    0),      # Little Ice Age (1750 CE, 200 BP)
+        (75,        290,   -0.1,    0),      # 1875 CE (75 BP) — early industrial
+        (0,         310,    0.3,    0.0),    # 1950 CE (0 BP) — mid-20th century
+        (-74,       420,    1.2,    0.15),   # 2024 CE (-74 BP) — present day
     ]
+    # Note: BP is Before Present = 1950 CE (year_bp_to_ce(bp) = 1950 - bp), so the
+    # industrial ramp is 290 ppm (1875) -> 310 (1950) -> 420 (2024 = -74 BP). The
+    # last point uses negative BP because the modern era extends past 1950 (see the
+    # ERAS table). np.interp clamps queries beyond -74 BP to the present value.
 
     # Ice sheet coverage at LGM: approximate southern boundary latitudes
     # Ref: Clark et al. (2009), Marshak (2019) Ch. 22
@@ -403,6 +408,11 @@ class GeographicAdvantage:
         "australia": {"lat": (-40, -10), "lng": (112, 155), "axis": 0.8},
     }
 
+    # Diamond Ch.10: diffusion is faster east-west (constant latitude -> similar
+    # climate) than north-south. The north-south reach is this fraction of the
+    # east-west reach, making the spread an ellipse elongated along latitude.
+    NS_DIFFUSION_FRACTION = 0.5
+
     def get_agricultural_potential(self, lat: float, lng: float,
                                    year_bp: float) -> float:
         """
@@ -422,21 +432,28 @@ class GeographicAdvantage:
             if year_bp > origin["start_bp"]:
                 continue  # Not invented yet
 
-            # Distance from origin
+            # Offset from origin (degrees)
             dlat = lat - origin["lat"]
             dlng = lng - origin["lng"]
-            dist = np.sqrt(dlat**2 + dlng**2)
 
             # Time since invention at origin
             years_since = origin["start_bp"] - year_bp
 
-            # Diffusion speed: ~1 km/year along E-W axis (Ammerman & Cavalli-Sforza 1971)
-            # Slower N-S due to climate change
+            # Anisotropic diffusion (Diamond 1997, Ch.10): crops/tech spread faster
+            # along the EAST-WEST axis (constant latitude -> similar climate & day
+            # length) than NORTH-SOUTH (crossing climate zones). Base E-W speed
+            # ~1 deg / 100 yr (Ammerman & Cavalli-Sforza 1971), scaled by the
+            # continent's axis-orientation advantage; the N-S reach is a fixed
+            # fraction of it, so the spread is an ellipse elongated east-west.
             axis_mult = self._get_axis_multiplier(lat, lng)
-            diffusion_radius_deg = (years_since * 0.01) * axis_mult  # ~1° per 100 years
+            ew_reach = (years_since * 0.01) * axis_mult           # east-west radius (deg)
+            ns_reach = ew_reach * self.NS_DIFFUSION_FRACTION      # north-south radius (deg)
 
-            if dist < diffusion_radius_deg:
-                proximity = 1.0 - dist / max(diffusion_radius_deg, 1)
+            # Normalised elliptical distance: < 1 means agriculture has reached here.
+            norm = np.sqrt((dlng / max(ew_reach, 1e-6)) ** 2 +
+                           (dlat / max(ns_reach, 1e-6)) ** 2)
+            if norm < 1.0:
+                proximity = 1.0 - norm
                 potential = origin["crop_value"] * proximity
                 best_potential = max(best_potential, potential)
 
@@ -743,11 +760,32 @@ class HistoricalSimulation:
             if tech.year_bp_available >= start_year_bp and not tech.prerequisites:
                 self.discovered_techs.add(tech.name)
 
+    # Industrial-era technologies whose discovery drives anthropogenic fossil
+    # emissions. industrialization_level() returns the fraction discovered, so a
+    # pre-industrial civilization -> 0 and a fully developed (Information-era)
+    # civilization -> 1. (renewable_energy is excluded: it mitigates rather than
+    # drives fossil emissions, and is handled via the renewable fraction.)
+    INDUSTRIAL_TECHS = (
+        "steam_engine", "electricity", "fossil_fuel_extraction",
+        "nuclear_energy", "computers", "internet",
+    )
+
     def get_current_era(self) -> Era:
         return get_era(self.year_bp)
 
     def get_current_year_ce(self) -> float:
         return year_bp_to_ce(self.year_bp)
+
+    def industrialization_level(self) -> float:
+        """Fraction of industrial-era technologies the civilization has discovered.
+
+        Drives anthropogenic fossil emissions in the macro model: 0.0 for a
+        pre-industrial civilization, ramping to 1.0 once it reaches the
+        Information era. Used so CO2 output scales with the civilisation's actual
+        development rather than a fixed present-day rate.
+        """
+        discovered = sum(1 for t in self.INDUSTRIAL_TECHS if t in self.discovered_techs)
+        return discovered / len(self.INDUSTRIAL_TECHS)
 
     def advance_time(self, n_ticks: int = 1) -> dict:
         """Advance simulation time by n ticks of the current era's time_scale."""

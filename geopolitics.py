@@ -276,11 +276,14 @@ class GeopoliticalSystem:
 
     def _update_nation_stats(self, settlements: list, alive_agents: list):
         """Recompute aggregate nation stats from member agents."""
-        # Build settlement -> agents mapping
+        # Build settlement -> agents mapping. Index agents by id once (O(agents))
+        # and look up each settlement's members directly, so this is
+        # O(agents + total_memberships) rather than O(settlements x agents).
+        agents_by_id = {a.id: a for a in alive_agents}
         settlement_agents: dict[int, list] = {}
         for s in settlements:
             settlement_agents[s.id] = [
-                a for a in alive_agents if a.id in s.members
+                agents_by_id[aid] for aid in s.members if aid in agents_by_id
             ]
 
         for nation in self.nations:
@@ -292,7 +295,7 @@ class GeopoliticalSystem:
             if not members:
                 continue
 
-            nation.total_wealth = sum(a.wealth for a in members)
+            nation.total_wealth = max(0.0, sum(a.wealth for a in members))
             nation.total_military = sum(a.skills.get_level("combat") for a in members)
             nation.technology_level = float(np.mean(
                 [a.skills.get_level("research") for a in members]
@@ -366,7 +369,9 @@ class GeopoliticalSystem:
                 if na.population > 0 and nb.population > 0:
                     power_a = na.total_wealth + na.total_military * 10
                     power_b = nb.total_wealth + nb.total_military * 10
-                    parity = 1.0 - abs(power_a - power_b) / (max(power_a, power_b) + 1)
+                    parity = float(np.clip(
+                        1.0 - abs(power_a - power_b) / (max(power_a, power_b) + 1),
+                        0.0, 1.0))
                     parity_tension = 0.003 * parity
                 else:
                     parity_tension = 0.0
@@ -418,7 +423,7 @@ class GeopoliticalSystem:
                 if self.relation_graph.has_edge(na.id, nb.id):
                     relation = (self.relation_graph[na.id][nb.id]["weight"] + 1.0) / 2.0
 
-                economic_mass = (na.total_wealth * nb.total_wealth) ** 0.5
+                economic_mass = max(0.0, na.total_wealth * nb.total_wealth) ** 0.5
                 distance = self._great_circle_deg(
                     na.center_lat, na.center_lng,
                     nb.center_lat, nb.center_lng,
@@ -508,11 +513,15 @@ class GeopoliticalSystem:
                                  else "territorial",
                     })
 
-                    # Worsen relations
+                    # Worsen relations symmetrically. Use add_edge for both
+                    # directions so a one-sided edge can never KeyError on the
+                    # reverse write (edges are normally created in pairs by
+                    # _update_relations; this stays robust if that ever changes).
                     if self.relation_graph.has_edge(na.id, nb.id):
                         w = self.relation_graph[na.id][nb.id]["weight"]
-                        self.relation_graph[na.id][nb.id]["weight"] = max(-1, w - 0.3)
-                        self.relation_graph[nb.id][na.id]["weight"] = max(-1, w - 0.3)
+                        new_w = max(-1.0, w - 0.3)
+                        self.relation_graph.add_edge(na.id, nb.id, weight=new_w)
+                        self.relation_graph.add_edge(nb.id, na.id, weight=new_w)
 
     def conflict_probability(
         self,
@@ -523,9 +532,11 @@ class GeopoliticalSystem:
         """
         Logistic conflict-probability model.
 
-        Returns per-tick probability of conflict initiation between this dyad.
-        See class-level CONFLICT_* coefficient block for calibration target
-        (active-conflict prevalence in 5-nation BAU run).
+        Returns the per-tick probability of conflict initiation between this
+        dyad, from a logistic model and then **capped at 0.10/tick** to bound the
+        ignition rate. The calibration target (active-conflict prevalence in the
+        5-nation BAU run, see the class-level CONFLICT_* block) is reached by
+        accumulation across ticks, not by a single high per-tick value.
 
         Sources:
         - Hughes (2019), International Futures (IFs) conflict module
@@ -543,7 +554,8 @@ class GeopoliticalSystem:
         # Power parity (near-peer = more conflict)
         power_a = nation_a.total_wealth + nation_a.total_military * 10
         power_b = nation_b.total_wealth + nation_b.total_military * 10
-        parity = 1.0 - abs(power_a - power_b) / (max(power_a, power_b) + 1)
+        parity = float(np.clip(
+            1.0 - abs(power_a - power_b) / (max(power_a, power_b) + 1), 0.0, 1.0))
 
         # Trade interdependence — liberal peace theory.
         # Russett (1993) Grasping the Democratic Peace, Princeton UP;
@@ -582,7 +594,9 @@ class GeopoliticalSystem:
         )
 
         probability = 1.0 / (1.0 + np.exp(-logit))
-        return float(np.clip(probability, 0.0, 0.1))  # Cap at 10% per tick
+        # Cap at 0.10/tick (see docstring): bounds the ignition rate; sustained
+        # prevalence comes from accumulation across ticks, not one large value.
+        return float(np.clip(probability, 0.0, 0.1))
 
     # ------------------------------------------------------------------
     # Negotiations

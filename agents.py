@@ -40,23 +40,40 @@ class TraitType(Enum):
 TRAIT_NAMES = [t.value for t in TraitType]
 
 
+def _wrap_longitude(lng: float) -> float:
+    """Wrap a longitude (degrees) to the half-open interval [-180, 180).
+
+    Used so movement and coastline land-checks treat the dateline as continuous
+    (a globe) instead of a wall, and so probes near +/-180 read the correct grid
+    cell rather than the opposite edge.
+    """
+    return ((lng + 180.0) % 360.0) - 180.0
+
+
 def generate_traits(parent_a: Optional[dict] = None,
                     parent_b: Optional[dict] = None,
-                    mutation_rate: float = 0.15) -> dict:
-    """Generate traits via crossover + mutation or random initialization."""
+                    mutation_rate: float = 0.15,
+                    rng: Optional[np.random.RandomState] = None) -> dict:
+    """Generate traits via crossover + mutation or random initialization.
+
+    ``rng`` should be the world's seeded ``RandomState`` so trait generation is
+    reproducible; it falls back to the global ``np.random`` when not supplied.
+    """
+    if rng is None:
+        rng = np.random
     if parent_a is None:
-        return {name: np.clip(np.random.beta(2, 2), 0.05, 0.95) for name in TRAIT_NAMES}
+        return {name: np.clip(rng.beta(2, 2), 0.05, 0.95) for name in TRAIT_NAMES}
 
     traits = {}
     for name in TRAIT_NAMES:
         # Crossover
-        if parent_b and np.random.random() < 0.5:
+        if parent_b and rng.random() < 0.5:
             val = parent_b.get(name, 0.5)
         else:
             val = parent_a.get(name, 0.5)
         # Mutation
-        if np.random.random() < mutation_rate:
-            val += np.random.normal(0, 0.1)
+        if rng.random() < mutation_rate:
+            val += rng.normal(0, 0.1)
         traits[name] = float(np.clip(val, 0.05, 0.95))
     return traits
 
@@ -149,11 +166,14 @@ class SkillSet:
         "research", "leadership", "diplomacy", "combat", "medicine"
     ]
 
-    def __init__(self, initial_skills: Optional[dict] = None):
+    def __init__(self, initial_skills: Optional[dict] = None,
+                 rng: Optional[np.random.RandomState] = None):
+        if rng is None:
+            rng = np.random
         if initial_skills:
             self.skills = {s: initial_skills.get(s, 0.01) for s in self.SKILL_TYPES}
         else:
-            self.skills = {s: max(0.01, np.random.exponential(0.1)) for s in self.SKILL_TYPES}
+            self.skills = {s: max(0.01, rng.exponential(0.1)) for s in self.SKILL_TYPES}
 
     def practice(self, skill_name: str, intensity: float = 1.0,
                  talent_modifier: float = 1.0):
@@ -169,6 +189,14 @@ class SkillSet:
     def get_top_skills(self, n: int = 3) -> list[tuple[str, float]]:
         sorted_skills = sorted(self.skills.items(), key=lambda x: x[1], reverse=True)
         return sorted_skills[:n]
+
+    def top_skill(self) -> tuple[str, float]:
+        """Return the single highest (name, level) skill, or a safe default.
+
+        Guards the common ``get_top_skills(1)[0]`` pattern against an empty skill
+        set (e.g. if skills ever become configurable / can be empty)."""
+        top = self.get_top_skills(1)
+        return top[0] if top else (self.SKILL_TYPES[0], 0.0)
 
     def inherit(self, parent_skills: 'SkillSet', inheritance_rate: float = 0.3) -> None:
         """Inherit partial skill aptitude from a parent."""
@@ -208,6 +236,11 @@ class Agent:
     POPULATION_PRESSURE_RADIUS = 3.0  # Degrees: crowding pushes agents outward
     POPULATION_PRESSURE_FORCE = 0.05  # Outward push per nearby agent
 
+    # Simulated habitable latitude band. Latitude is clamped to this range
+    # (the poles are outside the agent world); longitude wraps at the dateline.
+    LAT_MIN = -58.0
+    LAT_MAX = 73.0
+
     # Life-cycle thresholds expressed in REAL-WORLD YEARS, not ticks.
     # These get converted to ticks at runtime via _yrs_to_ticks() using the
     # current era's time scale. This keeps behavior coherent across the
@@ -224,7 +257,13 @@ class Agent:
 
     def __init__(self, x: float, y: float,
                  parent_a: Optional['Agent'] = None,
-                 parent_b: Optional['Agent'] = None):
+                 parent_b: Optional['Agent'] = None,
+                 rng: Optional[np.random.RandomState] = None):
+        # Seeded RNG for full reproducibility. World passes its own RandomState so
+        # that a fixed World(seed=...) yields identical agent trajectories; falls
+        # back to the global np.random only when constructed without a world.
+        self.rng = rng if rng is not None else np.random
+
         Agent._next_id += 1
         self.id = Agent._next_id
         self.alive = True
@@ -234,8 +273,8 @@ class Agent:
         # Position (lat/lng) and physics (degrees per tick)
         self.lat = x   # latitude
         self.lng = y   # longitude
-        self.vlat = np.random.uniform(-0.02, 0.02)
-        self.vlng = np.random.uniform(-0.02, 0.02)
+        self.vlat = self.rng.uniform(-0.02, 0.02)
+        self.vlng = self.rng.uniform(-0.02, 0.02)
 
         # Vital stats
         self.energy = 100.0
@@ -246,7 +285,7 @@ class Agent:
         # Genetics / Traits
         pa_traits = parent_a.traits if parent_a else None
         pb_traits = parent_b.traits if parent_b else None
-        self.traits = generate_traits(pa_traits, pb_traits)
+        self.traits = generate_traits(pa_traits, pb_traits, rng=self.rng)
 
         if parent_a:
             self.generation = max(parent_a.generation,
@@ -256,7 +295,7 @@ class Agent:
         self.name = self._generate_name()
 
         # Skills
-        self.skills = SkillSet()
+        self.skills = SkillSet(rng=self.rng)
         if parent_a:
             self.skills.inherit(parent_a.skills)
         if parent_b:
@@ -306,7 +345,7 @@ class Agent:
         self.divine_trust: float = 0.5
 
         # Movement heading (for smooth direction changes)
-        angle = np.random.uniform(0, 2 * np.pi)
+        angle = self.rng.uniform(0, 2 * np.pi)
         self.heading_x = np.cos(angle)
         self.heading_y = np.sin(angle)
 
@@ -317,7 +356,7 @@ class Agent:
         suffixes = ["ra", "on", "ix", "us", "ia", "en", "or", "is", "um", "ax",
                      "el", "an", "os", "yl", "in", "ar", "et", "ov", "ut", "ab"]
         mid = ["ri", "lo", "na", "vi", "th", "mo", "da", "si", "ke", ""]
-        return np.random.choice(prefixes) + np.random.choice(mid) + np.random.choice(suffixes)
+        return self.rng.choice(prefixes) + self.rng.choice(mid) + self.rng.choice(suffixes)
 
     # ------------------------------------------------------------------
     # Physics-Based Movement
@@ -353,24 +392,30 @@ class Agent:
             self.vlat *= scale
             self.vlng *= scale
 
-        # Apply velocity
-        new_lat = self.lat + self.vlat
-        new_lng = self.lng + self.vlng
+        # Apply velocity. Latitude is clamped to the habitable band; longitude
+        # wraps at the dateline so land checks near +/-180 use correctly wrapped
+        # coordinates instead of reading the wrong grid edge.
+        new_lat = float(np.clip(self.lat + self.vlat, self.LAT_MIN, self.LAT_MAX))
+        new_lng = _wrap_longitude(self.lng + self.vlng)
 
         # Ocean avoidance - check if next position is ocean
         if not is_land(new_lat, new_lng):
             # Bounce back and steer away
             self.vlat *= -0.5
             self.vlng *= -0.5
-            # Try to find land direction (check 8 directions)
+            # Try to find land direction (check 8 directions). Probe coordinates
+            # are wrapped/clamped, and the steering offset uses the shortest arc
+            # in longitude so a probe across the dateline does not yield a huge
+            # spurious vector.
             best_dist = float('inf')
-            best_dlat, best_dlng = 0, 0
+            best_dlat, best_dlng = 0.0, 0.0
             for angle in np.linspace(0, 2*np.pi, 8, endpoint=False):
-                check_lat = self.lat + np.sin(angle) * 2.0
-                check_lng = self.lng + np.cos(angle) * 2.0
+                check_lat = float(np.clip(self.lat + np.sin(angle) * 2.0,
+                                          self.LAT_MIN, self.LAT_MAX))
+                check_lng = _wrap_longitude(self.lng + np.cos(angle) * 2.0)
                 if is_land(check_lat, check_lng):
                     dlat = check_lat - self.lat
-                    dlng = check_lng - self.lng
+                    dlng = _wrap_longitude(check_lng - self.lng)
                     dist = dlat**2 + dlng**2
                     if dist < best_dist:
                         best_dist = dist
@@ -384,15 +429,9 @@ class Agent:
             self.lat = new_lat
             self.lng = new_lng
 
-        # World boundary clamp
-        self.lat = np.clip(self.lat, -58, 73)
-        self.lng = np.clip(self.lng, -178, 178)
-
-        # Wrap longitude
-        if self.lng > 180:
-            self.lng -= 360
-        elif self.lng < -180:
-            self.lng += 360
+        # World boundary: clamp latitude to the habitable band, wrap longitude.
+        self.lat = float(np.clip(self.lat, self.LAT_MIN, self.LAT_MAX))
+        self.lng = _wrap_longitude(self.lng)
 
         # Update heading from velocity
         speed = np.sqrt(self.vlat**2 + self.vlng**2)
@@ -412,7 +451,7 @@ class Agent:
 
     def _wander(self):
         """Apply random wandering force for exploration."""
-        angle_noise = np.random.normal(0, 0.3)
+        angle_noise = self.rng.normal(0, 0.3)
         cos_a, sin_a = np.cos(angle_noise), np.sin(angle_noise)
         new_hx = self.heading_x * cos_a - self.heading_y * sin_a
         new_hy = self.heading_x * sin_a + self.heading_y * cos_a
@@ -600,8 +639,8 @@ class Agent:
                 self.goal_lat, self.goal_lng = target.lat, target.lng
 
         elif goal == "explore":
-            if np.random.random() < 0.05:
-                angle = np.random.uniform(0, 2 * np.pi)
+            if self.rng.random() < 0.05:
+                angle = self.rng.uniform(0, 2 * np.pi)
                 self.heading_x = np.cos(angle)
                 self.heading_y = np.sin(angle)
             self.vlng += self.heading_x * self.GOAL_FORCE * self.traits["curiosity"]
@@ -811,7 +850,7 @@ class Agent:
         return {"success": False, "reward": -0.1, "description": "No food found"}
 
     def _action_work(self, world, intensity: float) -> dict:
-        top_skill = self.skills.get_top_skills(1)[0]
+        top_skill = self.skills.top_skill()
         skill_name, skill_level = top_skill
         earnings = intensity * skill_level * 5 * (1 + self.traits["ambition"])
         self.wealth += earnings
@@ -831,7 +870,7 @@ class Agent:
         if not nearby:
             return {"success": False, "reward": -0.05, "description": "No trading partners"}
 
-        partner = nearby[np.random.randint(len(nearby))]
+        partner = nearby[self.rng.randint(len(nearby))]
         skill_diff = (self.skills.get_level("trading") -
                       partner.skills.get_level("trading"))
         base_trade_value = max(0.5, 2 + skill_diff * 3) * behavior["intensity"]
@@ -851,21 +890,26 @@ class Agent:
 
         trade_value = base_trade_value * float(np.clip(modifier, 0.3, 2.5))
 
-        self.wealth += trade_value
-        partner.wealth -= trade_value * 0.5
+        # Conservative exchange: the wealth the initiator earns is transferred from
+        # the partner (bounded by what the partner can pay), so trade never creates
+        # or destroys wealth and no balance goes negative. Both parties still gain
+        # relationship affinity from a successful exchange.
+        transfer = min(trade_value, max(0.0, partner.wealth))
+        self.wealth += transfer
+        partner.wealth -= transfer
         self.skills.practice("trading", 1.0, self.traits["intelligence"])
 
         self._update_relationship(partner.id, 0.1)
         partner._update_relationship(self.id, 0.05)
 
-        return {"success": True, "reward": trade_value * 0.1,
-                "description": f"Traded with {partner.name} for {trade_value:.1f}"}
+        return {"success": True, "reward": transfer * 0.1,
+                "description": f"Traded with {partner.name} for {transfer:.1f}"}
 
     def _action_build_business(self, world) -> dict:
         if self.wealth < 50:
             return {"success": False, "reward": -0.1, "description": "Not enough capital"}
 
-        top_skill = self.skills.get_top_skills(1)[0]
+        top_skill = self.skills.top_skill()
         business_type = top_skill[0]
         investment = min(self.wealth * 0.4, 100)
         self.wealth -= investment
@@ -888,7 +932,7 @@ class Agent:
         if not nearby:
             return {"success": False, "reward": -0.05, "description": "Nobody nearby"}
 
-        partner = nearby[np.random.randint(len(nearby))]
+        partner = nearby[self.rng.randint(len(nearby))]
         compatibility = 1.0 - np.mean([
             abs(self.traits[t] - partner.traits[t]) for t in TRAIT_NAMES
         ])
@@ -921,22 +965,25 @@ class Agent:
         min_age = self._yrs_to_ticks(self.REPRODUCE_MIN_AGE_YEARS)
         candidates = [a for a in nearby if a.id != self.id and a.alive
                        and a.energy > 30 and a.age > min_age
-                       and a.reproduction_cooldown <= 0]
+                       and a.reproduction_cooldown <= 0 and a.wealth >= 10]
 
         if not candidates:
             return {"success": False, "reward": -0.05, "description": "No suitable partner"}
 
         partner = max(candidates, key=lambda a: self.relationships.get(a.id, 0))
 
-        offspring_lat = (self.lat + partner.lat) / 2 + np.random.normal(0, 0.2)
-        offspring_lng = (self.lng + partner.lng) / 2 + np.random.normal(0, 0.2)
+        offspring_lat = (self.lat + partner.lat) / 2 + self.rng.normal(0, 0.2)
+        offspring_lng = (self.lng + partner.lng) / 2 + self.rng.normal(0, 0.2)
 
-        child = Agent(offspring_lat, offspring_lng, parent_a=self, parent_b=partner)
+        child = Agent(offspring_lat, offspring_lng, parent_a=self, parent_b=partner, rng=self.rng)
         world.add_agent(child)
 
-        self.energy -= 25
-        self.wealth -= 10
-        partner.energy -= 15
+        # Both parents pay an energy + wealth cost, kept non-negative; the partner is
+        # debited symmetrically so reproduction never creates wealth from nothing.
+        self.energy = max(0.0, self.energy - 25)
+        self.wealth = max(0.0, self.wealth - 10)
+        partner.energy = max(0.0, partner.energy - 15)
+        partner.wealth = max(0.0, partner.wealth - 10)
         cooldown_ticks = self._yrs_to_ticks(self.REPRODUCE_COOLDOWN_YEARS)
         self.reproduction_cooldown = cooldown_ticks
         partner.reproduction_cooldown = cooldown_ticks
@@ -955,7 +1002,7 @@ class Agent:
         discovery_chance = self.traits["curiosity"] * self.traits["intelligence"]
         reward = 0.1
         desc = "Explored new territory"
-        if np.random.random() < discovery_chance * 0.3:
+        if self.rng.random() < discovery_chance * 0.3:
             reward = 0.5
             desc = "Made a discovery while exploring!"
             self.happiness = min(100, self.happiness + 5)
@@ -965,11 +1012,11 @@ class Agent:
         """Autoresearch-inspired: formulate hypothesis, test, learn."""
         topics = ["farming_efficiency", "trading_strategy", "construction",
                   "medicine_knowledge", "social_dynamics"]
-        topic = topics[np.random.randint(len(topics))]
+        topic = topics[self.rng.randint(len(topics))]
 
         research_power = (self.traits["intelligence"] * self.traits["curiosity"] *
                           self.skills.get_level("research"))
-        success = np.random.random() < 0.2 + research_power * 0.5
+        success = self.rng.random() < 0.2 + research_power * 0.5
 
         self.energy -= 3
         self.skills.practice("research", 1.0, self.traits["intelligence"])
@@ -1036,7 +1083,7 @@ class Agent:
         from earth import is_land
         # Pick a random direction biased away from current problems
         # Move a large distance
-        angle = np.random.uniform(0, 2 * np.pi)
+        angle = self.rng.uniform(0, 2 * np.pi)
         move_dist = 2.0 + 3.0 * self.traits["curiosity"]  # 2-5 degrees
         new_lat = self.lat + np.sin(angle) * move_dist
         new_lng = self.lng + np.cos(angle) * move_dist
@@ -1150,6 +1197,15 @@ class Agent:
 
         # World model training is handled centrally in World.step()
         # (shared model trains on aggregated experience from all agents)
+
+        # Keep vital stats within their declared ranges so downstream consumers
+        # (world-model observation in [0,1], geopolitics wealth aggregates) never
+        # see negative or out-of-range values. Energy is already >0 here because
+        # the death check above handled energy<=0.
+        self.energy = float(np.clip(self.energy, 0.0, 100.0))
+        self.health = float(np.clip(self.health, 0.0, 100.0))
+        self.happiness = float(np.clip(self.happiness, 0.0, 100.0))
+        self.wealth = max(0.0, self.wealth)
 
         return {"event": "action", "agent_id": self.id, "agent_name": self.name,
                 "action": self.current_action, "outcome": outcome}

@@ -282,7 +282,7 @@ df[["tick", "macro_co2_ppm", "macro_temperature", "population"]].plot(x="tick")
 ## 9. Run the test suites
 
 ```bash
-python test_macro.py          # 8/8 — IPCC AR6 calibration on BAU 2025→2100
+python test_macro.py          # 9/9 — IPCC AR6 calibration on BAU 2025→2100
 python test_agent_state.py    # 4/4 PASS + benchmarks across 500–2000 agents
 python test_llm_module.py     # 9/9 — fallback mode, JSON parsing, rate limiting
 ```
@@ -337,7 +337,7 @@ kill -9 <pid>          # only if Ctrl-C twice did not work
 ## 12. Where to next
 
 - [`README.md`](README.md) — scientific foundations, equations, references
-- [`docs/validation.md`](docs/validation.md) — IPCC calibration evidence (8/8)
+- [`docs/validation.md`](docs/validation.md) — IPCC calibration evidence (9/9)
 - [`docs/data_attributions.md`](docs/data_attributions.md) — third-party data licenses
 - [`SECURITY.md`](SECURITY.md) — threat model, before exposing beyond localhost
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — how to submit changes

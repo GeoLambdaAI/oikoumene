@@ -40,6 +40,15 @@ Thumbs.db
 .env.*
 *.pem
 
-# NOTE: data/ (Natural Earth + precomputed .npy/.npz) IS committed on purpose
-# so the app runs after a clone. See docs/data_attributions.md. To regenerate
-# instead, delete data/ and run the generate_*.py scripts.
+# ---- Downloaded empirical datasets (NOT committed) ----
+# Large third-party downloads fetched on demand by generate_empirical_inputs.py
+# (HYDE ~5.3 GB, ETOPO ~395 MB, raw zips, derived .npy, etc.). They exceed
+# GitHub's file-size limit, are fully regenerable from the documented sources,
+# and are optional at runtime (the empirical tests skip when absent). Regenerate
+# with: python generate_empirical_inputs.py --<dataset>
+data/empirical/
+
+# NOTE: the rest of data/ (Natural Earth + precomputed earth_*.npy / present_day_*
+# / landmask) IS committed on purpose so the app runs after a clone. See
+# docs/data_attributions.md. To regenerate instead, delete those files and run
+# the generate_*.py scripts.

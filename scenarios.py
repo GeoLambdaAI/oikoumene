@@ -161,7 +161,7 @@ class ScenarioLoader:
             # Fallback: use existing spawn logic
             from earth import find_land_spawn_points
             for lat, lng in find_land_spawn_points(n_agents, world.seed):
-                agent = Agent(lat, lng)
+                agent = Agent(lat, lng, rng=world.rng)
                 agent.energy = 80 + world.rng.random() * 20
                 agent.wealth = 30
                 world.agents.append(agent)
@@ -194,7 +194,7 @@ class ScenarioLoader:
                     if is_land(lat, lng):
                         break
 
-            agent = Agent(lat, lng)
+            agent = Agent(lat, lng, rng=world.rng)
 
             # Find nearest country and set stats from data
             nearest_country = self._find_nearest_country(lat, lng, countries)
@@ -252,15 +252,11 @@ class ScenarioLoader:
                 research_spending=cd.get("research_pct_gdp", 0.5) / 100,
             )
 
-            # Assign nearby agents to this nation
-            for agent in world.agents:
-                dist = np.sqrt((agent.lat - cd["lat"])**2 + (agent.lng - cd["lng"])**2)
-                if dist < 8.0:  # ~800km
-                    # Only assign if not already in another nation
-                    already = any(agent.id in set() for _ in [])  # placeholder
-                    # Simple: create settlement for this nation
-                    pass
-
+            # Agent-to-nation membership is not assigned statically here: the
+            # geopolitical system recomputes each nation's members emergently
+            # every tick (proximity to the nation centre), which also drives
+            # total_wealth/military aggregates. The nation only needs to exist
+            # with its centre coordinates at initialization.
             world.geopolitics.nations.append(nation)
             world.geopolitics.relation_graph.add_node(nation.id)
             world.geopolitics.trade_graph.add_node(nation.id)

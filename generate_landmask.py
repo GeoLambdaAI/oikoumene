@@ -3,7 +3,7 @@ Generate a high-resolution rasterized land/ocean mask from Natural Earth
 110m land polygons using Shapely.
 
 Output: data/landmask.npy — boolean grid at 0.25° resolution
-        (540 rows x 1440 cols covering -90 to +90 lat, -180 to +180 lng)
+        (720 rows x 1440 cols covering -90 to +90 lat, -180 to +180 lng)
 
 This only needs to be run once. The resulting .npy file is loaded at
 runtime by earth.py for fast O(1) land/ocean lookups.

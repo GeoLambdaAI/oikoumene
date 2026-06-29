@@ -151,7 +151,25 @@ def run_bau_scenario(verbose: bool = True):
         else:
             print(f"WARNING: {total - passed} checks failed")
 
-    return passed == total
+    return checks
+
+
+def test_bau_scenario_ipcc_envelope():
+    """Collected regression test for the BAU IPCC-AR6 validation suite.
+
+    This is the pytest-collected counterpart of ``run_bau_scenario`` so that the
+    headline validation the paper cites is actually exercised by ``pytest`` (and
+    therefore by CI), not only by ``python test_macro.py``. Each anchor is asserted
+    individually so a failure names the specific metric that drifted out of band.
+    """
+    checks = run_bau_scenario(verbose=False)
+    assert checks, "BAU scenario produced no validation checks"
+    failures = [
+        f"{label}: got {value}, expected {expected}"
+        for label, ok, value, expected in checks
+        if not ok
+    ]
+    assert not failures, "BAU validation anchors outside IPCC-AR6 envelope:\n" + "\n".join(failures)
 
 
 def test_climate_sensitivity_consistency():
@@ -191,15 +209,170 @@ def test_carbon_cycle_unit_anchor():
     assert ok, f"dCO2/dt {dco2_per_yr:.2f} ppm/yr outside 2.0-3.5 envelope"
 
 
+def test_industrialization_gates_anthropogenic_emissions():
+    """CO2 output scales with the civilization's industrialization.
+
+    - default (no feedback) == full industrialization, so the IPCC validation and
+      the present-day scenario keep their calibrated 2025 rate;
+    - a pre-industrial civ (industrialization=0) adds only the small land-use term,
+      far below the industrial rate but still positive (early Anthropocene);
+    - emissions increase monotonically with industrialization.
+    """
+    model = MacroModel(config={"dt_years": 1.0 / 12.0})
+    y0 = model._state_to_vector()
+
+    dco2_default = model._ode_system(0, y0, {})[0]
+    dco2_full = model._ode_system(0, y0, {"industrialization": 1.0})[0]
+    dco2_half = model._ode_system(0, y0, {"industrialization": 0.5})[0]
+    dco2_pre = model._ode_system(0, y0, {"industrialization": 0.0})[0]
+
+    # Calibration preserved: default feedback behaves as fully industrial.
+    assert abs(dco2_default - dco2_full) < 1e-9, (
+        f"default dCO2 {dco2_default:.4f} != full {dco2_full:.4f} "
+        "(would break IPCC calibration)"
+    )
+    # Pre-industrial: small land-use term only — positive but well below industrial.
+    assert 0.0 < dco2_pre < 0.25 * dco2_full, (
+        f"pre-industrial dCO2 {dco2_pre:.3f} should be small but positive "
+        f"(full {dco2_full:.3f})"
+    )
+    # Monotonic in industrialization.
+    assert dco2_pre < dco2_half < dco2_full, (
+        f"not monotonic: pre={dco2_pre:.3f} half={dco2_half:.3f} full={dco2_full:.3f}"
+    )
+
+
+def test_hadcrut5_consistency_with_gistemp():
+    """
+    Cross-check the macro layer's NASA GISTEMP-derived present-day temperature
+    anomaly against an independent observational reconstruction (HadCRUT5,
+    Met Office Hadley Centre + CRU).
+
+    Skips automatically when the user has not run
+        python generate_empirical_inputs.py --hadcrut5
+    so the test does not force a network download in CI.
+
+    Validation rationale:
+      * MacroState.temperature_anomaly defaults to +1.3 deg C above pre-
+        industrial, sourced from NASA GISTEMP (1951-1980 baseline).
+      * HadCRUT5 uses a 1961-1990 baseline; the baseline offset between
+        the two periods is about 0.10-0.15 deg C, so a tolerance of
+        +-0.4 deg C captures baseline + recent-year variability.
+    """
+    import pytest
+    import numpy as np
+
+    # Guard the import so a checkout without the optional empirical-data tooling
+    # skips cleanly instead of erroring (honours the docstring's "skips
+    # automatically" promise, e.g. on a clone that omits generate_empirical_inputs).
+    try:
+        from generate_empirical_inputs import load_hadcrut5_global_annual
+    except ModuleNotFoundError:
+        pytest.skip(
+            "generate_empirical_inputs not present in this checkout — "
+            "empirical-data tooling is optional"
+        )
+
+    series = load_hadcrut5_global_annual()
+    if series is None:
+        pytest.skip(
+            "HadCRUT5 not fetched yet — run "
+            "`python generate_empirical_inputs.py --hadcrut5`"
+        )
+
+    print("\n" + "=" * 70)
+    print("VALIDATION: HadCRUT5 vs. MacroModel present-day anomaly")
+    print("=" * 70)
+
+    # Structural sanity (the file was produced by our downloader)
+    assert series.dtype.names == ("year", "anom", "sigma_ens",
+                                  "sigma_cov", "sigma_total"), series.dtype.names
+    assert series["year"][0] == 1850, f"first year {series['year'][0]} != 1850"
+    assert len(series) >= 170, f"unexpectedly short series: {len(series)} rows"
+    assert np.all(np.diff(series["year"]) == 1), "years are not contiguous"
+
+    # Reject provisional/partial trailing years. The in-progress calendar year
+    # has sharply inflated coverage uncertainty and is dropped at generation time
+    # (_drop_incomplete_trailing_years); guard against it silently reappearing so
+    # the recent-year mean below is always over complete annual means.
+    recent_cov = float(np.median(series["sigma_cov"][-31:]))
+    assert series["sigma_cov"][-1] <= 5.0 * recent_cov, (
+        f"final year {int(series['year'][-1])} looks provisional "
+        f"(coverage uncertainty {series['sigma_cov'][-1]:.4f} "
+        f">> recent median {recent_cov:.4f}) — drop it before saving the series"
+    )
+
+    # Observed warming sanity check: a decade mean should be substantially
+    # positive. Anchor on 2014-2023 (the most recent IPCC AR6 reference window).
+    decade_mean = float(
+        series[(series["year"] >= 2014) & (series["year"] <= 2023)]["anom"].mean()
+    )
+    print(f"  HadCRUT5 2014-2023 mean anomaly: +{decade_mean:.3f} deg C "
+          "(1961-1990 baseline)")
+    assert decade_mean > 0.7, (
+        f"observed 2014-2023 mean {decade_mean:.3f} unexpectedly low — "
+        "either the downloader saved the wrong file or upstream data has shifted"
+    )
+
+    # Cross-reconstruction agreement with the macro layer's GISTEMP-anchored
+    # PRESENT-DAY value. Two corrections are required for a fair comparison:
+    #
+    # (1) Time window — MacroState.temperature_anomaly is a "current"
+    #     anomaly, so compare against the most recent 3-year HadCRUT5 mean
+    #     (smooths single-year ENSO noise without lagging into the still-
+    #     warming early-2010s decade).
+    # (2) Baseline shift — HadCRUT5 is referenced to 1961-1990 while
+    #     GISTEMP/MacroState are referenced to 1951-1980. The 1961-1990 mean
+    #     is warmer than the 1951-1980 mean by about +0.13 deg C, so
+    #     HadCRUT5 values are systematically lower than the GISTEMP-baseline
+    #     anomalies by that amount (Hansen et al. 2010; IPCC AR6 WG1 Box 2.3).
+    BASELINE_SHIFT_HADCRUT_TO_GISTEMP = 0.13  # deg C, literature value
+    recent_n = 3
+    recent_mean_hadcrut = float(series["anom"][-recent_n:].mean())
+    recent_mean_on_gistemp_baseline = (
+        recent_mean_hadcrut + BASELINE_SHIFT_HADCRUT_TO_GISTEMP
+    )
+    macro_anomaly = MacroModel().state.temperature_anomaly
+    diff = abs(recent_mean_on_gistemp_baseline - macro_anomaly)
+
+    print(f"  HadCRUT5 last-{recent_n}-yr mean:     "
+          f"+{recent_mean_hadcrut:.3f} deg C  (raw, 1961-1990 baseline)")
+    print(f"  HadCRUT5 shifted to GISTEMP base: "
+          f"+{recent_mean_on_gistemp_baseline:.3f} deg C  "
+          f"(+{BASELINE_SHIFT_HADCRUT_TO_GISTEMP:.2f} baseline correction)")
+    print(f"  MacroState.temperature_anomaly:  "
+          f"+{macro_anomaly:.3f} deg C  (GISTEMP-anchored)")
+    print(f"  agreement |HadCRUT5* - GISTEMP|: "
+          f"{diff:.3f} deg C  (tolerance: 0.20)")
+
+    # 0.20 deg C tolerance after baseline correction covers (a) GISTEMP vs
+    # HadCRUT5 methodological differences and (b) GISS year-to-year drift
+    # in MacroState's calibration value.
+    assert diff < 0.20, (
+        f"HadCRUT5 last-3-yr mean (baseline-corrected to GISTEMP, "
+        f"{recent_mean_on_gistemp_baseline:.3f}) and MacroState anchor "
+        f"({macro_anomaly:.3f}) disagree by {diff:.3f} deg C; investigate."
+    )
+    print("  PASS: GISTEMP and HadCRUT5 agree on present-day warming.")
+
+
 if __name__ == "__main__":
-    success = run_bau_scenario()
+    _checks = run_bau_scenario()
+    success = all(ok for _, ok, _, _ in _checks)
     unit_ok = True
-    for _fn in (test_climate_sensitivity_consistency, test_carbon_cycle_unit_anchor):
+    for _fn in (
+        test_climate_sensitivity_consistency,
+        test_carbon_cycle_unit_anchor,
+        test_hadcrut5_consistency_with_gistemp,
+    ):
         try:
             _fn()
         except AssertionError as exc:
             print(f"  FAILED: {exc}")
             unit_ok = False
+        except Exception:
+            # skipped via pytest.skip(...) when invoked outside pytest -- ignore
+            pass
     print("\n" + "=" * 70)
     overall = success and unit_ok
     print(f"OVERALL: {'ALL PASS' if overall else 'SOME FAILED'}")

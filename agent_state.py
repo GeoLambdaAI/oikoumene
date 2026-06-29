@@ -7,6 +7,14 @@ into these arrays plus non-vectorizable state (memory, relationships).
 
 Memory layout: "Hot state in arrays, cold state in objects."
 Reference: Noel Llopis, "Data-Oriented Design" (2009).
+
+STATUS: benchmarked building block, NOT yet wired into the live engine (see
+README "Future SoA Building Blocks"). The live per-agent physics lives in
+``agents.py``. The batch constants here (e.g. the 8000-tick metabolism
+denominator and the 800-tick aging threshold in ``batch_metabolism``) are the
+*Modern-era* (1 month/tick) equivalents of the era-aware ``_yrs_to_ticks(...)``
+thresholds in ``Agent.update``; if this path is ever integrated, those must be
+made era-aware to match ``agents.py`` exactly.
 """
 
 import numpy as np
@@ -210,13 +218,15 @@ class AgentStateArrays:
         self.age[idx] += 1
         self.reproduction_cooldown[idx] = np.maximum(0, self.reproduction_cooldown[idx] - 1)
 
-        # Energy drain
+        # Energy drain. 8000 ticks = the Modern-era equivalent of Agent.update's
+        # era-aware METABOLISM_DOUBLE_YEARS (8000 ticks * 1/12 yr/tick ~= 666 yr).
         base = 0.15 + self.age[idx].astype(np.float32) / 8000.0
         speed = np.sqrt(self.vlat[idx]**2 + self.vlng[idx]**2)
         self.energy[idx] -= base + speed * 0.5
         self.happiness[idx] *= 0.999
 
-        # Health decay for old agents (age > 800)
+        # Health decay for old agents. 800 ticks = Modern-era equivalent of
+        # Agent.update's era-aware AGING_THRESHOLD_YEARS (~66.7 yr * 12 ticks/yr).
         old = idx[self.age[idx] > 800]
         if len(old) > 0:
             self.health[old] -= 0.03 * (self.age[old].astype(np.float32) / 800.0)

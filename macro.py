@@ -124,6 +124,11 @@ class MacroModel:
 
     # --- Socioeconomic ---
     BASE_EMISSION_RATE = 42.0       # GtCO2/yr baseline 2025, source: GCP 2024
+    # Pre-industrial land-use / early-agriculture CO2 source (deforestation; the
+    # "early Anthropocene", Ruddiman 2003). Small relative to industrial fossil
+    # emissions; present even before industrialisation and faded out as industry
+    # takes over (see _ode_system). GtCO2/yr at present-day population scale.
+    LAND_USE_EMISSION_RATE = 3.0
     # Conversion: 1 ppm CO2 corresponds to ~7.81 GtCO2 in atmosphere
     # (derived from atmospheric mass / molar mass ratios; equivalently 2.13 GtC).
     # IPCC AR6 WG1 Annex VII. -> 1 GtCO2 = 0.1280 ppm.
@@ -265,8 +270,21 @@ class MacroModel:
         # Note: (1-renewable)^0.6 because many sectors can't easily switch
         # (cement, steel, aviation, agriculture), so emissions decline slower
         # than renewable fraction suggests. Source: IEA Net Zero 2021
+        # Anthropogenic CO2 has two components so emissions emerge from the
+        # civilization's development instead of being a fixed present-day rate:
+        #  (a) Industrial fossil emissions, gated by `industrialization` in [0,1]
+        #      (the civ's industrial-tech development — see
+        #      HistoricalSimulation.industrialization_level). A pre-industrial
+        #      civ emits ~0 fossil CO2.
+        #  (b) A small land-use term (deforestation / early agriculture — the
+        #      "early Anthropocene", Ruddiman 2003) that exists even before
+        #      industry and fades as industrialisation takes over.
+        # industrialization defaults to 1.0 when no agent feedback is supplied
+        # (standalone validation / present-day), so the calibrated 2025 rate and
+        # the IPCC BAU checks are preserved exactly (industrial=full, land_use=0).
+        industrialization = float(feedback.get("industrialization", 1.0))
         fossil_share = max(0.05, (1.0 - renewable) ** 0.6)
-        fossil_emissions = (
+        industrial_emissions = (
             self.BASE_EMISSION_RATE *
             fossil_share *                # Non-renewable energy share
             (pop / 8.1) *                 # Population scaling
@@ -274,7 +292,11 @@ class MacroModel:
             emission_multiplier *         # Agent activity modifier
             (1.0 / (tech ** 0.5)) *      # Technology reduces emissions (sqrt: diminishing)
             min(1.0, fossil / 0.3 + 0.3) # Supply constraint only when very depleted
+        ) * industrialization
+        land_use_emissions = (
+            self.LAND_USE_EMISSION_RATE * (pop / 8.1) * (1.0 - industrialization)
         )
+        fossil_emissions = industrial_emissions + land_use_emissions
 
         # Natural absorption: ~50% of emissions, weakens with warming
         # Friedlingstein et al. 2024: carbon sink efficiency declining

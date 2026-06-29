@@ -1,7 +1,9 @@
 # Python 3.11+ required — see pyproject.toml ([project] requires-python).
-# Optional extras: pip install -e ".[viz]"    (matplotlib + pandas for scripts/figures.py)
-#                  pip install -e ".[dev]"    (pytest + pytest-cov + ruff + mypy)
-#                  pip install -e ".[torch]"  (PyTorch JEPA backend; CPU or CUDA)
+# Optional extras: pip install -e ".[viz]"          (matplotlib + pandas for scripts/figures.py)
+#                  pip install -e ".[dev]"          (pytest + pytest-cov + ruff + mypy)
+#                  pip install -e ".[torch]"        (PyTorch JEPA backend; CPU or CUDA)
+#                  pip install -e ".[data]"         (rasterio + pyproj for generate_empirical_inputs.py)
+#                  pip install -e ".[sensitivity]"  (SALib for scripts/sensitivity.py Sobol analysis)
 
 numpy>=1.24.0
 flask>=3.0.0

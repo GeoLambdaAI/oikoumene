@@ -7,6 +7,162 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — empirical input scaffolding (for v0.4)
+
+- **`generate_empirical_inputs.py`** — downloads and resamples three
+  authoritative open datasets to the simulator's 0.5° grid:
+  - **CHELSA V2.1** climatology (CC0 1.0) — verified at
+    https://doi.org/10.16904/envidat.228; streamed from
+    `https://os.unil.cloud.switch.ch/chelsa02/chelsa/global/climatologies/`
+    via GDAL `/vsicurl/` so the network footprint stays small.
+  - **SoilGrids 2.0** soil properties (CC-BY 4.0) — verified at
+    `https://files.isric.org/soilgrids/latest/data/`; root-zone
+    soc + nitrogen + clay combined into a composite fertility index.
+  - **HYDE 3.2.1** historical land-use & population (CC0 1.0) —
+    verified at https://doi.org/10.17026/DANS-25G-GEZ3 via the standard
+    Dataverse access API (`baseline.zip` fileId 5490328, ~5.3 GB,
+    cached on disk).
+  - **HadCRUT.5.1.0.0** Met Office + CRU global mean annual temperature
+    anomaly 1850-present (Open Government Licence v3.0) — verified at
+    https://www.metoffice.gov.uk/hadobs/hadcrut5/, downloads the
+    `component_series.global.annual.csv` (~10 KB) and saves as a structured
+    NumPy array `data/empirical/hadcrut5_global_annual.npy` with named
+    fields `(year, anom, sigma_ens, sigma_cov, sigma_total)`.
+  - **ETOPO 2022** NOAA NCEI 60-arc-sec global relief
+    (**US Government public domain**; *"freely available to use for all
+    private, academic, or commercial purposes"* per User Guide §4) — single
+    NetCDF on the NOAA THREDDS server (~395 MB, one-time download),
+    resampled to the simulator's 0.5° grid and saved as
+    `data/empirical/etopo_elevation.npy` (float32 metres, EGM2008-referenced;
+    ocean values negative). Replaces the synthetic `earth_elevation.npy`.
+  - **UCDP-GED v25.1** Uppsala Conflict Data Program Georeferenced Event
+    Dataset 1989-present (**CC-BY 4.0**) — verified at
+    https://ucdp.uu.se/downloads/, downloads `ged251-csv.zip` (~29 MB)
+    and saves a structured NumPy array
+    `data/empirical/ucdp_ged_events.npy` with named fields
+    `(year, lat, lng, best, conflict_id)`. First empirical anchor for the
+    emergent geopolitics layer (replaces the role of the illustrative
+    `present_day_conflicts.json`).
+  - **Natural Earth 10 m rivers** (public domain) — drop-in resolution
+    upgrade over the shipped 110 m vector. Fetched from the Natural Earth
+    CDN, shapefile converted to GeoJSON via `pyshp`, saved as
+    `data/empirical/ne_10m_rivers_lake_centerlines.geojson`.
+  - Outputs go under `data/empirical/` so they coexist with the synthesized
+    `data/earth_*.npy` rasters; `world.py` will choose which to load when
+    the actual ingestion is wired (separate change for v0.4).
+- New optional dependency extra **`[sensitivity]`** (`SALib>=1.5`) in
+  `pyproject.toml`; install with `pip install -e ".[sensitivity]"`.
+  Runtime simulator does not depend on it.
+- New optional dependency extra **`[data]`** (`rasterio>=1.3`,
+  `pyproj>=3.6`, `pyshp>=2.3`) in `pyproject.toml`; install with
+  `pip install -e ".[data]"`. The simulator runtime does not depend on it.
+  (HadCRUT5 and UCDP-GED ingestion only need numpy + requests + stdlib, so
+  they do not require the `[data]` extra. CHELSA / SoilGrids / HYDE / ETOPO
+  need rasterio + GDAL; the Natural Earth 10 m rivers downloader needs
+  pyshp for shapefile → GeoJSON conversion.)
+
+### Added — validation
+
+- **`scripts/sensitivity.py`** — Sobol global sensitivity analysis on the
+  macro layer's 2100 BAU outputs (`T_2100`, `CO2_2100`, `Pop_2100`).
+  Decomposes variance into the contributions of eight key parameters
+  (forcing, climate feedback, ocean coupling, sink fraction + sink
+  weakening, baseline emissions, population growth) with priors drawn
+  from IPCC AR6 / Friedlingstein 2024 / UN WPP literature ranges. Uses
+  SALib's Saltelli sampler; default N=64 takes ~5 min on commodity CPU.
+  Results land in `scripts/results/sensitivity_N<N>.json` and are
+  summarised in [`docs/validation.md`](docs/validation.md).
+- **`test_sensitivity.py`** — three smoke tests for the SALib pipeline:
+  problem spec matches the documented 8-parameter set, instance-level
+  parameter overrides actually propagate into the integrated trajectory
+  (lambda=0.8 vs 1.6 must yield T_2100 spread > 0.5 deg C), and a tiny
+  N=2 end-to-end run produces a well-shaped JSON artefact. Skips when
+  SALib is not installed.
+- **`test_macro.py::test_hadcrut5_consistency_with_gistemp`** —
+  new validation test that cross-checks the macro layer's NASA GISTEMP-
+  derived present-day temperature anchor against an *independent* second
+  observational reconstruction (HadCRUT5). Skips automatically if the user
+  has not run `--hadcrut5` (no forced network download in CI).
+- **`test_empirical_inputs.py`** — new test module dedicated to the
+  empirical-input loaders. Each test skips cleanly when its dataset has
+  not been fetched and asserts strong realistic properties when present:
+  - `test_etopo_elevation_loads_and_is_realistic`: shape, ocean-dominated
+    mean, Himalayan-scale max (>5 km), trench-scale min (<-5 km), land
+    fraction in [0.20, 0.45].
+  - `test_ucdp_ged_events_load_and_have_realistic_spread`: ≥100k events,
+    1989-start year range, globally-spread lat/lng, plausible total
+    best-estimate deaths.
+  - `test_ne_10m_rivers_richer_than_shipped_110m`: strictly more features
+    than the shipped 110m vector; only LineString / MultiLineString
+    geometries.
+- **`docs/data_attributions.md`** — new sections for CHELSA, SoilGrids,
+  HYDE with verified licences, archives and citations; updated licence-
+  compatibility footer.
+
+### Added — dynamic anthropogenic climate
+
+- **Industrialization-coupled CO₂ emissions.** Anthropogenic CO₂ now emerges
+  from the civilization's development instead of a fixed present-day rate: the
+  macro layer's fossil emissions are gated by an `industrialization` factor in
+  `[0,1]` (derived from the civ's discovered industrial technologies via
+  `HistoricalSimulation.industrialization_level()`), plus a small pre-industrial
+  land-use term (Ruddiman 2003 "early Anthropocene"). A low/pre-industrial
+  civilization now produces little CO₂; a fully industrial one reproduces the
+  calibrated 2025 rate. `industrialization` defaults to `1.0` with no agent
+  feedback, so the present-day scenario and the IPCC BAU validation are preserved
+  exactly.
+- **Continuous paleo → Industrial climate handoff.** When a historical run first
+  enters the Industrial era, the macro state is seeded from the paleoclimate
+  trajectory (temperature, CO₂, sea level, year, pre-industrial socioeconomics)
+  instead of snapping to the present-day `MacroState` defaults — the climate now
+  carries the lower paleo values forward and rises as the civ industrialises.
+- **`test_climate_continuity.py`**, **`test_god_mode.py`**,
+  **`test_reproducibility.py`** — new regression suites; the BAU IPCC envelope is
+  now a collected `pytest` test (`test_bau_scenario_ipcc_envelope`), so the
+  headline 9/9 validation runs in CI, not only via `python test_macro.py`.
+
+### Changed
+
+- **Reproducibility.** Agent-level randomness (traits, mutation, movement,
+  partner selection, reproduction, research, names) now draws from the world's
+  seeded `RandomState` instead of the unseeded global `np.random`; per-world
+  entity ID counters reset on construction. A fixed `World(seed=…)` is now
+  bit-reproducible across runs.
+- **Earth-system grids regenerated.** The latitude–temperature law was recalibrated
+  to its documented ERA5 zonal-mean anchors (it was ~7 °C too warm in the polar
+  tail), so Antarctica now classifies as ice sheet; continentality is cos(lat)-
+  corrected. The committed `data/earth_*.npy` were regenerated accordingly.
+- **HadCRUT5 series** drops trailing provisional (in-progress) calendar years via
+  their inflated coverage uncertainty, so the saved record ends at the last
+  complete annual mean.
+
+### Fixed
+
+- **Engine: unbounded growth.** Dead agents and dead settlements (population 0)
+  are now pruned each tick — previously both lists grew without bound over a long
+  historical run, leaking memory and making per-tick loops O(total-ever-created).
+- **Engine: economy.** Trade is now conservative (a transfer, not wealth created
+  from nothing); wealth/energy/happiness/health are clamped to their declared
+  ranges; reproduction debits both parents symmetrically; geopolitics aggregates
+  are hardened against negative/NaN propagation.
+- **Diamond geographic determinism** now diffuses agriculture/technology faster
+  east–west than north–south (anisotropic, per Diamond 1997 Ch. 10) instead of an
+  isotropic circular radius.
+- **Paleoclimate anchor labels** corrected to the 1950-BP convention (industrial
+  CO₂ ramp 290→310→420 ppm); `god_mode` drought now applies once and restores the
+  exact baseline (was compounding per tick); plus dateline-wrap, geopolitics
+  parity/relation-edge, and a dead scenario placeholder loop.
+
+### Performance
+
+- **Vectorised the two hot per-cell loops** that ran every macro/ice tick over the
+  ~12k-cell grid: `bridge.apply_macro_to_world` (8.5 ms → 0.15 ms) and
+  `world._apply_ice_age_effects` (289 ms → 0.10 ms) — both verified numerically
+  identical to the original loops. These removed periodic multi-100 ms stalls.
+- **Geopolitics** no longer stalls abruptly at the Industrial-era transition:
+  settlement pruning bounds the count, and nation-stat aggregation is now
+  O(agents + memberships) instead of O(settlements × agents).
+
 ## [0.3.0] - 2026-05-25
 
 Adds the PyTorch JEPA backend that earlier releases listed as a v0.3
@@ -477,7 +633,7 @@ release, not a refactor.
 
 - Initial public release under AGPL-3.0-or-later.
 - **Agent cognition** — JEPA world model (LeCun 2022; Maes et al. 2026): encoder, AdaLN predictor, SIGReg regularization, CEM planner. Shared model for batch inference across all agents.
-- **Macro layer** — 14-state ODE system: climate (IPCC AR6 calibrated, 8/8 validation checks), Hubbert resource depletion, DICE damage function, Earth4All social tension, endogenous Romer technology growth.
+- **Macro layer** — 14-state ODE system: climate (IPCC AR6 calibrated, 9/9 validation checks), Hubbert resource depletion, DICE damage function, Earth4All social tension, endogenous Romer technology growth.
 - **Geopolitics** — Emergent nation-states from settlement coalescence, gravity-model trade (Tinbergen 1962), International Futures conflict probability with liberal-peace coupling.
 - **Scenarios** — (A) 70,000-year historical from Out-of-Africa with paleoclimate, Diamond geographic determinism, and Dawkins evolutionary adaptation; (B) present-day initialized from World Bank, NOAA, and NASA data.
 - **Earth system** — Real geography from Natural Earth (110m), Whittaker biome diagram, USGS resource provinces, FAO GAEZ-inspired soil fertility.

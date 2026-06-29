@@ -5,10 +5,10 @@ Records comprehensive state snapshots at configurable intervals to CSV + JSON.
 Every row captures a complete cross-section of the simulation at one point in time:
 macro state, geopolitical summary, population statistics, resource levels, and events.
 
-Output files per run (in logs/):
-- {run_id}_timeseries.csv   — One row per logging interval, all metrics as columns
-- {run_id}_metadata.json    — Run config, seed, scenario, timestamps, column descriptions
-- {run_id}_snapshots/       — Full JSON state dumps at checkpoint intervals (optional)
+Output files per run (each run gets its own subdirectory logs/{run_id}/):
+- {run_id}/timeseries.csv   — One row per logging interval, all metrics as columns
+- {run_id}/metadata.json    — Run config, seed, scenario, timestamps, column descriptions
+- {run_id}/snapshots/       — Full JSON state dumps at checkpoint intervals (optional)
 
 Designed for:
 - Post-hoc analysis in pandas, R, or Excel

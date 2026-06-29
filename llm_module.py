@@ -42,12 +42,16 @@ except ImportError:
 @dataclass
 class LLMConfig:
     """
-    LLM configuration. EU AI Act compliant providers only:
-    - Ollama (local, no data leaves the machine)
-    - Mistral AI (French company, EU-based, GDPR compliant)
+    LLM configuration.
+
+    Privacy-first defaults: agent cognition runs on a LOCAL model (Ollama, no
+    data leaves the machine) or EU-based Mistral AI (GDPR-friendly). Any
+    OpenAI-compatible endpoint also works (set provider/base_url/model, e.g.
+    OpenAI) — note that a non-EU provider receives agent context off-machine,
+    which the operator is responsible for assessing under EU AI Act / GDPR.
     """
     enabled: bool = False
-    provider: str = "ollama"                   # "ollama" | "mistral"
+    provider: str = "ollama"                   # "ollama" | "mistral" | "openai" (OpenAI-compatible)
     base_url: str = "http://localhost:11434"    # Ollama default
     model: str = "qwen3:8b"                    # Ollama default model
     api_key: str = ""                          # Required for Mistral AI
@@ -59,10 +63,12 @@ class LLMConfig:
         "socialize", "trade", "govern", "teach", "form_alliance", "negotiate"
     ])
 
-# Provider presets (EU AI Act compliant only)
+# Provider presets. Defaults are privacy-first (local Ollama / EU Mistral);
+# openai is an opt-in OpenAI-compatible endpoint (data leaves the EU — see LLMConfig).
 PROVIDER_PRESETS = {
     "ollama": {"base_url": "http://localhost:11434", "model": "qwen3:8b"},
     "mistral": {"base_url": "https://api.mistral.ai", "model": "mistral-small-latest"},
+    "openai": {"base_url": "https://api.openai.com", "model": "gpt-4o-mini"},
 }
 
 

@@ -179,12 +179,16 @@ def generate_temperature(lat_grid, lng_grid, elevation, land_mask):
     """
     print("  Generating temperature model...")
 
-    # Base temperature from latitude
+    # Base temperature from latitude.
     # Calibrated to observed zonal mean annual temperatures (ERA5 reanalysis):
     # 0° ~26°C, 20° ~24°C, 30° ~20°C, 45° ~12°C, 55° ~5°C, 65° ~-3°C, 80° ~-18°C
-    # Ref: Hartmann 2016 Fig 2.2, ERA5 climatology 1991-2020
+    # Ref: Hartmann 2016 Fig 2.2, ERA5 climatology 1991-2020.
+    # These coefficients reproduce the anchors across the whole range (80° ->
+    # -18.6°C). The previous fit (0.15*L + 0.004*L^2) was ~7°C too warm in the
+    # polar tail (-10.6°C at 80°), which left Antarctica/Greenland misclassified
+    # as grassland/tundra by the T<-15 ice-sheet rule in classify_biomes().
     abs_lat = np.abs(lat_grid)
-    temp = 27.0 - 0.15 * abs_lat - 0.004 * abs_lat ** 2
+    temp = 27.0 - 0.05 * abs_lat - 0.0065 * abs_lat ** 2
 
     # Elevation lapse rate: -6.5°C per 1000m
     # Our elevation scale: 0-1 maps to 0-5500m (mean continental elev ~800m)
@@ -193,11 +197,15 @@ def generate_temperature(lat_grid, lng_grid, elevation, land_mask):
     elev_meters = elevation * 5500.0
     temp -= 6.5 * elev_meters / 1000.0 * land_mask
 
-    # Continentality: compute distance to coast (simplified)
-    # Inland areas: warmer summers, colder winters -> slightly lower mean
-    # Ref: Conrad (1946)
+    # Continentality: compute distance to coast (simplified).
+    # Inland areas: warmer summers, colder winters -> slightly lower mean.
+    # Ref: Conrad (1946). distance_transform_edt measures in grid cells; a degree
+    # of longitude shrinks with latitude, so scale by cos(lat) to approximate
+    # ground distance (otherwise high-latitude interiors read as artificially far
+    # inland). Approximate — it scales the mixed lat/lng EDT step uniformly.
     from scipy.ndimage import distance_transform_edt
-    coast_dist = distance_transform_edt(land_mask) * RESOLUTION  # degrees from coast
+    cos_lat = np.cos(np.deg2rad(np.abs(lat_grid)))
+    coast_dist = distance_transform_edt(land_mask) * RESOLUTION * cos_lat  # ~degrees of ground distance
     continentality = np.clip(coast_dist / 40.0, 0, 1)  # Normalize, max ~40° inland
     temp -= continentality * 2.0  # Inland areas 0-2°C cooler (mean annual effect)
 
@@ -270,9 +278,12 @@ def generate_precipitation(lat_grid, lng_grid, elevation, land_mask):
 
     precip = 800 + itcz + subtropical_dry + midlat_rain + polar_dry
 
-    # Continentality: drier inland
+    # Continentality: drier inland. cos(lat)-scaled to approximate ground
+    # distance (see generate_temperature), so high-latitude interiors are not
+    # treated as artificially far from the coast.
     from scipy.ndimage import distance_transform_edt
-    coast_dist = distance_transform_edt(land_mask) * RESOLUTION
+    cos_lat = np.cos(np.deg2rad(np.abs(lat_grid)))
+    coast_dist = distance_transform_edt(land_mask) * RESOLUTION * cos_lat
     continentality_dry = np.clip(coast_dist / 20.0, 0, 1) * -400
     precip += continentality_dry * land_mask
 
@@ -400,14 +411,14 @@ def classify_biomes(temperature, precipitation, elevation, land_mask):
     savanna = land & (T >= 18) & (P >= 300) & (P < 1000) & (biome == Biome.OCEAN)
     biome[savanna] = Biome.TROPICAL_SAVANNA
 
-    # Mediterranean: 10-20°C, 300-900mm (dry summers)
-    # Ref: Csa/Csb in Köppen; specific regions
-    med_lat = np.abs(lat_grid := np.broadcast_to(
-        np.linspace(LAT_MAX - RESOLUTION/2, LAT_MIN + RESOLUTION/2, ROWS)[:, None],
-        (ROWS, COLS)
-    ))
-    med_mask = land & (T >= 10) & (T < 20) & (P >= 300) & (P < 900) & (med_lat > 28) & (med_lat < 45)
-    biome[np.where(med_mask & (biome == Biome.OCEAN))] = Biome.MEDITERRANEAN
+    # Mediterranean: 10-20°C, 300-900mm, dry-summer mid-latitudes (Köppen Csa/Csb).
+    # abs_lat is a (ROWS, 1) column that broadcasts against the (ROWS, COLS) masks.
+    abs_lat = np.abs(
+        np.linspace(LAT_MAX - RESOLUTION / 2, LAT_MIN + RESOLUTION / 2, ROWS)
+    )[:, None]
+    med_mask = (land & (T >= 10) & (T < 20) & (P >= 300) & (P < 900)
+                & (abs_lat > 28) & (abs_lat < 45) & (biome == Biome.OCEAN))
+    biome[med_mask] = Biome.MEDITERRANEAN
 
     # Temperate forest: 5-20°C, >600mm
     # Ref: Whittaker; Cf/Cw in Köppen

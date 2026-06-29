@@ -508,6 +508,15 @@ altitude, and disease environment have higher survival and reproduction rates.
 1. **Shared JEPA World Model** — 1 model for N agents (not N copies)
 2. **Tick-skipping** — CEM plan every 3 ticks, cached behavior between
 3. **cKDTree** — O(log N) spatial queries (was O(N) hash grid)
+4. **Vectorised macro/ice coupling** — `apply_macro_to_world` and
+   `_apply_ice_age_effects` rewritten from per-cell Python loops to NumPy
+   (removed periodic multi-100 ms stalls; verified numerically identical)
+5. **Bounded entities** — dead agents and settlements are pruned every tick, and
+   nation statistics are aggregated in O(agents + memberships) rather than
+   O(settlements × agents)
+
+> Note: the benchmark table above predates optimizations 4–5; re-run on your
+> hardware for current numbers.
 
 ### Future SoA Building Blocks (benchmarked, not yet integrated)
 

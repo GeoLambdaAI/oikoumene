@@ -543,7 +543,12 @@ def on_select_agent(data):
 # Main
 # ============================================================================
 
-if __name__ == "__main__":
+def main() -> None:
+    """Console entry point: launch the World Genesis web server.
+
+    Exposed as the ``world-genesis`` script via [project.scripts] so the package
+    is runnable after ``pip install`` as well as via ``python app.py``.
+    """
     port = int(os.environ.get("PORT", 5000))
     # Default to loopback so the unauthenticated control surface is not
     # exposed on the LAN. Set BIND_HOST=0.0.0.0 explicitly only when the
@@ -560,3 +565,7 @@ if __name__ == "__main__":
         print("           reverse proxy with auth before exposing publicly.")
     print("=" * 60)
     socketio.run(app, host=host, port=port, debug=False)
+
+
+if __name__ == "__main__":
+    main()

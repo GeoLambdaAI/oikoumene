@@ -241,8 +241,11 @@ class GodMode:
 
                 if effect.effect_type == "plague":
                     self._apply_plague_tick(world, effect)
-                elif effect.effect_type == "drought":
-                    self._apply_drought(world, effect)
+                # Drought is applied once when triggered (see trigger_drought);
+                # its reduced regen persists until _revert_drought restores the
+                # snapshot. It must NOT be re-applied per tick — doing so
+                # compounded the reduction multiplicatively and never reverted
+                # cleanly (the old approximate inverse left permanent drift).
 
                 if effect.remaining_ticks <= 0:
                     expired.append(i)
@@ -262,31 +265,38 @@ class GodMode:
                 self._process_divine_message(agent, msg, world)
 
     def _apply_drought(self, world, effect: ActiveEffect):
-        """Reduce food and water regen in drought area."""
-        for r in range(world.resources.rows):
-            lat = world.resources.lat_max - (r + 0.5) * world.resources.cell_size_deg
-            for c in range(world.resources.cols):
-                lng = world.resources.lng_min + (c + 0.5) * world.resources.cell_size_deg
+        """Reduce food and water regen in the drought area (applied once).
+
+        Snapshots the affected cells' pre-drought regen values onto the effect so
+        ``_revert_drought`` can restore them exactly (idempotent baseline pattern,
+        as used by the macro/ice-age coupling). This avoids the multiplicative
+        drift of the previous per-tick apply + approximate-inverse revert.
+        """
+        res = world.resources
+        food_snap: dict[tuple[int, int], float] = {}
+        water_snap: dict[tuple[int, int], float] = {}
+        for r in range(res.rows):
+            lat = res.lat_max - (r + 0.5) * res.cell_size_deg
+            for c in range(res.cols):
+                lng = res.lng_min + (c + 0.5) * res.cell_size_deg
                 dist = np.sqrt((lat - effect.lat)**2 + (lng - effect.lng)**2)
                 if dist <= effect.radius_deg:
                     proximity = 1.0 - dist / effect.radius_deg
                     reduction = effect.severity * proximity
-                    world.resources.food_regen[r, c] *= max(0.1, 1.0 - reduction)
-                    world.resources.water_regen[r, c] *= max(0.1, 1.0 - reduction)
+                    food_snap[(r, c)] = float(res.food_regen[r, c])
+                    water_snap[(r, c)] = float(res.water_regen[r, c])
+                    res.food_regen[r, c] *= max(0.1, 1.0 - reduction)
+                    res.water_regen[r, c] *= max(0.1, 1.0 - reduction)
+        effect.params["_food_baseline"] = food_snap
+        effect.params["_water_baseline"] = water_snap
 
     def _revert_drought(self, world, effect: ActiveEffect):
-        """Restore regen rates after drought expires (approximate)."""
-        for r in range(world.resources.rows):
-            lat = world.resources.lat_max - (r + 0.5) * world.resources.cell_size_deg
-            for c in range(world.resources.cols):
-                lng = world.resources.lng_min + (c + 0.5) * world.resources.cell_size_deg
-                dist = np.sqrt((lat - effect.lat)**2 + (lng - effect.lng)**2)
-                if dist <= effect.radius_deg:
-                    proximity = 1.0 - dist / effect.radius_deg
-                    restoration = effect.severity * proximity
-                    scale = 1.0 / max(0.1, 1.0 - restoration)
-                    world.resources.food_regen[r, c] *= min(10.0, scale)
-                    world.resources.water_regen[r, c] *= min(10.0, scale)
+        """Restore the exact pre-drought regen rates from the saved snapshot."""
+        res = world.resources
+        for (r, c), val in effect.params.get("_food_baseline", {}).items():
+            res.food_regen[r, c] = val
+        for (r, c), val in effect.params.get("_water_baseline", {}).items():
+            res.water_regen[r, c] = val
 
     def _apply_plague_tick(self, world, effect: ActiveEffect):
         """Apply plague health damage to agents in area."""

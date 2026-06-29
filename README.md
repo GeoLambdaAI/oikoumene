@@ -19,17 +19,18 @@ Each autonomous agent uses a JEPA world model (LeCun 2022; Maes et al. 2026) to 
 [![Tests](https://github.com/GeoLambdaAI/world-genesis/actions/workflows/test.yml/badge.svg)](https://github.com/GeoLambdaAI/world-genesis/actions/workflows/test.yml)
 [![DOI](https://img.shields.io/badge/DOI-pending-lightgrey.svg)](https://www.geolambda.ai)
 
-> **Status:** v0.2.1 — calibration release. v0.2.0 fixed six categories
-> of bugs in the v0.1.0 JEPA training, climate physics, conflict modelling,
-> agent lifecycle scaling, and macro/agent coupling. v0.2.1 is a same-day
-> follow-up that resolved five additional coupling/timing bugs in the
-> integration glue (regen-array ratchets, tech-diffusion double-credit,
-> stale trade edges, paleo ice-retreat recovery, macro `dt_years` 10× rate
-> mismatch) plus several UI-payload corrections that caused the right-sidebar
-> dashboard to misrepresent paleo-era state. See [CHANGELOG.md](CHANGELOG.md)
-> for details. The `Built primarily with Claude Code` framing in the header
-> applies to the v0.1.0 generation; the v0.2.0 / v0.2.1 calibration passes
-> were separate human-led reviews with LLM assistance.
+> **Status:** v0.3.0 — empirical-data & validation release, with substantial
+> unreleased work toward v0.4 (see the `[Unreleased]` section of
+> [CHANGELOG.md](CHANGELOG.md)): anthropogenic CO₂ now scales with the
+> civilization's industrialisation (with a continuous paleo→Industrial climate
+> handoff), seeded-RNG reproducibility, engine hardening (agent/settlement
+> pruning, conservative economy), and performance vectorisation that removed the
+> periodic per-tick stalls. v0.2.x were calibration releases that fixed
+> scientific-constant, coupling, and timing bugs; v0.3.0 added the empirical-input
+> pipeline and Sobol sensitivity analysis. See [CHANGELOG.md](CHANGELOG.md) for
+> the full history. The `Built primarily with Claude Code` framing in the header
+> applies to the v0.1.0 generation; subsequent calibration/feature passes were
+> human-led reviews with LLM assistance.
 > 
 > **Tested on:**
 > - Ubuntu 22.04 ARM, Python 3.11.

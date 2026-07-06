@@ -237,6 +237,8 @@ class ScenarioLoader:
             if cd["population"] < 1_000_000:
                 continue  # Skip very small countries
 
+            wealth_bn = cd.get("gdp_usd", 0) / 1e9
+            mil_spending = cd.get("military_pct_gdp", 2.0) / 100
             nation = NationState(
                 id=i + 1,
                 name=cd.get("name", cd["iso3"]),
@@ -244,19 +246,28 @@ class ScenarioLoader:
                 center_lat=cd["lat"],
                 center_lng=cd["lng"],
                 population=cd["population"],
-                total_wealth=cd.get("gdp_usd", 0) / 1e9,
+                total_wealth=wealth_bn,
+                # Warm-start the deterrence/parity dimension: seed military mass
+                # from military spending × GDP instead of leaving it at 0 (which
+                # made every dyad look militarily identical and killed the
+                # power-asymmetry signal). This shifts conflict risk toward
+                # genuine near-peer rivalries, per Bremer (1992) parity effect.
+                total_military=mil_spending * wealth_bn,
                 technology_level=1.0 + cd.get("technology_level", 0.5),
-                military_spending=cd.get("military_pct_gdp", 2.0) / 100,
+                military_spending=mil_spending,
                 carbon_policy=(cd.get("renewable_pct", 15) - 50) / 50,
                 trade_openness=float(np.clip(cd.get("trade_pct_gdp", 50) / 100, 0.1, 1.0)),
                 research_spending=cd.get("research_pct_gdp", 0.5) / 100,
+                seeded=True,
             )
 
-            # Agent-to-nation membership is not assigned statically here: the
-            # geopolitical system recomputes each nation's members emergently
-            # every tick (proximity to the nation centre), which also drives
-            # total_wealth/military aggregates. The nation only needs to exist
-            # with its centre coordinates at initialization.
+            # These are scenario-anchored real countries: they start with no
+            # member settlements and are defined by their centre coordinates and
+            # seeded aggregate stats. Marking them `seeded=True` keeps the
+            # geopolitical system from pruning them as "empty" and from zeroing
+            # their seeded population/wealth. Emergent settlements that grow near
+            # a nation centre are still absorbed into it by proximity, at which
+            # point its aggregates become agent-driven.
             world.geopolitics.nations.append(nation)
             world.geopolitics.relation_graph.add_node(nation.id)
             world.geopolitics.trade_graph.add_node(nation.id)
@@ -266,6 +277,15 @@ class ScenarioLoader:
         for i, cd in enumerate(countries):
             if cd["population"] >= 1_000_000:
                 nation_by_iso[cd["iso3"]] = i + 1
+
+        # Advance the emergent-nation id counter past every seeded id so a nation
+        # that later forms organically cannot collide with a seeded country.
+        from geopolitics import GeopoliticalSystem
+        if world.geopolitics.nations:
+            GeopoliticalSystem._next_nation_id = max(
+                GeopoliticalSystem._next_nation_id,
+                max(n.id for n in world.geopolitics.nations),
+            )
 
         self._create_alliance_cluster(world, nation_by_iso, NATO_MEMBERS, "NATO")
         self._create_alliance_cluster(world, nation_by_iso, EU_MEMBERS, "EU")

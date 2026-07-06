@@ -50,12 +50,35 @@ sim_running = False
 sim_speed = 1.0  # Ticks per second multiplier
 sim_thread = None
 
+# Concurrency control (eventlet cooperative green-threads).
+#
+# world_lock serializes every mutation of the shared World so a tick that yields
+# mid-step (LLM HTTP calls yield under eventlet) cannot interleave with an event
+# handler that also mutates the world (step/reset/god-event/chat).
+#
+# loop_generation invalidates stale simulation-loop greenlets: each spawned loop
+# captures the current generation and exits as soon as it no longer matches.
+# Without it, an old loop still parked in time.sleep() (up to ~10 s at low speed)
+# would resume and run alongside a freshly spawned loop after a reset/restart
+# flipped sim_running back to True — two loops stepping the same World.
+world_lock = eventlet.semaphore.Semaphore(1)
+loop_generation = 0
+
 
 def create_world(seed: int = 42, initial_agents: int = 25,
                   start_year_bp: int = 70000, scenario_id: str = "historical"):
     global world
     from scenarios import SCENARIOS
     scenario = SCENARIOS.get(scenario_id, SCENARIOS["historical"])
+
+    # Finalize the outgoing world's logger before discarding it, so its CSV is
+    # flushed/closed and metadata gets ended_at/total_rows (otherwise every
+    # reset leaked an open file handle and a truncated, never-closed run).
+    if world is not None:
+        try:
+            world.logger.end_run()
+        except Exception as exc:  # never let logging teardown block a reset
+            print(f"[logger] end_run on reset failed: {exc}")
 
     print(f"  Scenario: {scenario.name}")
     print("  Generating Earth terrain...")
@@ -69,20 +92,43 @@ def create_world(seed: int = 42, initial_agents: int = 25,
     return world
 
 
-def simulation_loop():
-    """Background simulation loop."""
-    global sim_running
-    while sim_running:
-        if world:
-            stats = world.step()
-            socketio.emit("tick", stats)
+def simulation_loop(my_generation):
+    """Background simulation loop.
 
-            # Send full state every 10 ticks for sync
-            if world.tick % 10 == 0:
-                socketio.emit("full_state", world.get_full_state())
+    Runs only while it owns the current generation; a reset/restart bumps
+    loop_generation, so any older loop exits at its next check instead of
+    double-stepping the world.
+    """
+    while sim_running and my_generation == loop_generation:
+        if world:
+            with world_lock:
+                # Re-check inside the lock: a reset may have run while we waited.
+                if not (sim_running and my_generation == loop_generation) or world is None:
+                    break
+                stats = world.step()
+                emit_full = world.tick % 10 == 0
+                full_state = world.get_full_state() if emit_full else None
+            socketio.emit("tick", stats)
+            if emit_full:
+                socketio.emit("full_state", full_state)
 
         delay = max(0.02, 1.0 / max(0.1, sim_speed))
         time.sleep(delay)
+
+
+def _start_loop():
+    """Start a fresh simulation-loop greenlet, invalidating any prior one."""
+    global sim_running, sim_thread, loop_generation
+    loop_generation += 1
+    sim_running = True
+    sim_thread = eventlet.spawn(simulation_loop, loop_generation)
+
+
+def _stop_loop():
+    """Signal the running loop (if any) to exit and invalidate its generation."""
+    global sim_running, loop_generation
+    sim_running = False
+    loop_generation += 1
 
 
 # ============================================================================
@@ -245,47 +291,80 @@ def on_connect():
 
 @socketio.on("start")
 def on_start():
-    global sim_running, sim_thread
     if not sim_running:
-        sim_running = True
-        sim_thread = eventlet.spawn(simulation_loop)
-
+        _start_loop()
     socketio.emit("status", {"running": True})
 
 
 @socketio.on("stop")
 def on_stop():
-    global sim_running
-    sim_running = False
+    _stop_loop()
     socketio.emit("status", {"running": False})
 
 
 @socketio.on("step")
 def on_step():
     if world:
-        stats = world.step()
+        with world_lock:
+            if world is None:
+                return
+            stats = world.step()
+            full_state = world.get_full_state()
         socketio.emit("tick", stats)
-        socketio.emit("full_state", world.get_full_state())
+        socketio.emit("full_state", full_state)
 
 
 @socketio.on("set_speed")
 def on_set_speed(data):
     global sim_speed
-    sim_speed = float(data.get("speed", 1.0))
+    try:
+        speed = float((data or {}).get("speed", 1.0))
+    except (TypeError, ValueError):
+        return
+    # Reject NaN/inf and clamp to a sane range; the loop also clamps its delay.
+    if speed != speed or speed in (float("inf"), float("-inf")):
+        return
+    sim_speed = min(100.0, max(0.1, speed))
+
+
+# Bounds for client-supplied reset parameters.
+MAX_INITIAL_AGENTS = 5000
+_SEED_MAX = 2 ** 32 - 1
 
 
 @socketio.on("reset")
 def on_reset(data=None):
-    global sim_running, world
-    sim_running = False
-    time.sleep(0.1)
-    seed = data.get("seed", 42) if data else 42
-    scenario = data.get("scenario", "historical") if data else "historical"
-    agents = data.get("agents", 25) if data else 25
+    # Stop and invalidate any running loop so it cannot resume against the new
+    # world after we rebuild it.
+    _stop_loop()
+    data = data if isinstance(data, dict) else {}
+
+    from scenarios import SCENARIOS
+    scenario = data.get("scenario", "historical")
+    if not isinstance(scenario, str) or scenario not in SCENARIOS:
+        scenario = "historical"
+
+    try:
+        seed = int(data.get("seed", 42))
+    except (TypeError, ValueError):
+        seed = 42
+    seed = seed % (_SEED_MAX + 1)  # numpy RandomState requires 0..2**32-1
+
+    raw_agents = data.get("agents", 25)
+    try:
+        agents = int(raw_agents)
+    except (TypeError, ValueError):
+        agents = 25
     if scenario == "present_day" and agents == 25:
         agents = 300
-    create_world(seed=seed, initial_agents=agents, scenario_id=scenario)
-    socketio.emit("full_state", world.get_full_state())
+    agents = min(MAX_INITIAL_AGENTS, max(1, agents))
+
+    # Rebuild under the lock so a not-yet-exited loop greenlet can never observe
+    # a half-constructed world.
+    with world_lock:
+        create_world(seed=seed, initial_agents=agents, scenario_id=scenario)
+        full_state = world.get_full_state()
+    socketio.emit("full_state", full_state)
     socketio.emit("status", {"running": False})
 
 
@@ -293,8 +372,10 @@ def on_reset(data=None):
 @socketio.on("set_llm_config")
 def on_set_llm_config(data):
     if world:
-        world.llm.update_config(data)
-        socketio.emit("llm_status", world.llm.get_status())
+        result = world.llm.update_config(data if isinstance(data, dict) else {})
+        status = world.llm.get_status()
+        status["config_errors"] = result.get("errors", [])
+        socketio.emit("llm_status", status)
 
 
 @socketio.on("test_llm")
@@ -314,23 +395,23 @@ def on_set_jepa_backend(data):
     scheduling means this is the same safety pattern used by on_reset) and
     resumed afterwards only if it was running and the swap succeeded.
     """
-    global sim_running, sim_thread
     if not world:
         return
+    data = data if isinstance(data, dict) else {}
     backend = data.get("backend", "numpy")
     preset = data.get("preset", "default")
     device = data.get("device", "auto")
 
     was_running = sim_running
     if was_running:
-        sim_running = False
-        time.sleep(0.12)  # let the current tick finish before swapping
+        _stop_loop()  # invalidate the current loop's generation
 
-    result = world.set_jepa_backend(backend=backend, preset=preset, device=device)
+    # The lock guarantees the swap does not interleave with an in-flight tick.
+    with world_lock:
+        result = world.set_jepa_backend(backend=backend, preset=preset, device=device)
 
     if was_running:
-        sim_running = True
-        sim_thread = eventlet.spawn(simulation_loop)
+        _start_loop()
 
     socketio.emit("jepa_status", result)
 
@@ -350,26 +431,31 @@ def on_god_whisper(data):
     agent_id = data.get("agent_id", 0)
     message = data.get("message", "")
 
-    result = world.god_mode.whisper_to_agent(world, agent_id, message)
+    # Hold the lock across processing (which may call the LLM and yield) so the
+    # world cannot be reset/swapped underneath this handler mid-flight.
+    with world_lock:
+        if world is None:
+            return
+        result = world.god_mode.whisper_to_agent(world, agent_id, message)
 
-    # Find the agent and process the whisper immediately (don't wait for next tick)
-    agent = None
-    for a in world.agents:
-        if a.id == agent_id and a.alive:
-            agent = a
-            break
+        # Find the agent and process the whisper immediately (don't wait for tick)
+        agent = None
+        for a in world.agents:
+            if a.id == agent_id and a.alive:
+                agent = a
+                break
 
-    if agent and message and agent.divine_messages:
-        # Process the whisper now so we can return the reaction
-        msg = agent.divine_messages.pop(0)
-        world.god_mode._process_divine_message(agent, msg, world)
+        if agent and message and agent.divine_messages:
+            # Process the whisper now so we can return the reaction
+            msg = agent.divine_messages.pop(0)
+            world.god_mode._process_divine_message(agent, msg, world)
 
-        result["agent_response"] = agent.last_dialogue or ""
-        result["agent_tone"] = "neutral"
-        result["complied"] = agent.memory.episodic[-1].get("complied", False) if agent.memory.episodic else False
-        result["goal_changed"] = agent.memory.episodic[-1].get("goal_parsed") if agent.memory.episodic else None
-        result["divine_trust"] = round(agent.divine_trust, 2)
-        result["used_llm"] = hasattr(agent, 'last_dialogue') and bool(agent.last_dialogue)
+            result["agent_response"] = agent.last_dialogue or ""
+            result["agent_tone"] = "neutral"
+            result["complied"] = agent.memory.episodic[-1].get("complied", False) if agent.memory.episodic else False
+            result["goal_changed"] = agent.memory.episodic[-1].get("goal_parsed") if agent.memory.episodic else None
+            result["divine_trust"] = round(agent.divine_trust, 2)
+            result["used_llm"] = hasattr(agent, 'last_dialogue') and bool(agent.last_dialogue)
 
     socketio.emit("god_result", result)
 
@@ -377,8 +463,11 @@ def on_god_whisper(data):
 @socketio.on("god_vision")
 def on_god_vision(data):
     if world:
-        result = world.god_mode.send_vision_to_nation(
-            world, data.get("nation_id", 0), data.get("message", ""))
+        with world_lock:
+            if world is None:
+                return
+            result = world.god_mode.send_vision_to_nation(
+                world, data.get("nation_id", 0), data.get("message", ""))
         socketio.emit("god_result", result)
 
 
@@ -387,31 +476,36 @@ def on_god_commandment(data):
     if not world:
         return
     message = data.get("message", "")
-    result = world.god_mode.issue_commandment(
-        world, message,
-        data.get("lat", 0), data.get("lng", 0), data.get("radius", 10))
+    # Hold the lock across per-agent LLM processing (which yields) so the world
+    # cannot be reset/swapped mid-flight.
+    with world_lock:
+        if world is None:
+            return
+        result = world.god_mode.issue_commandment(
+            world, message,
+            data.get("lat", 0), data.get("lng", 0), data.get("radius", 10))
 
-    # Process all queued messages immediately so agents react now
-    complied_count = 0
-    refused_count = 0
-    goals_changed = {}
-    for agent in world.agents:
-        if not agent.alive:
-            continue
-        if hasattr(agent, 'divine_messages') and agent.divine_messages:
-            msg = agent.divine_messages.pop(0)
-            world.god_mode._process_divine_message(agent, msg, world)
-            # Check what happened
-            if agent.memory.episodic:
-                last = agent.memory.episodic[-1]
-                if last.get("type") == "divine_message":
-                    if last.get("complied"):
-                        complied_count += 1
-                        goal = last.get("goal_parsed")
-                        if goal:
-                            goals_changed[goal] = goals_changed.get(goal, 0) + 1
-                    else:
-                        refused_count += 1
+        # Process all queued messages immediately so agents react now
+        complied_count = 0
+        refused_count = 0
+        goals_changed = {}
+        for agent in world.agents:
+            if not agent.alive:
+                continue
+            if hasattr(agent, 'divine_messages') and agent.divine_messages:
+                msg = agent.divine_messages.pop(0)
+                world.god_mode._process_divine_message(agent, msg, world)
+                # Check what happened
+                if agent.memory.episodic:
+                    last = agent.memory.episodic[-1]
+                    if last.get("type") == "divine_message":
+                        if last.get("complied"):
+                            complied_count += 1
+                            goal = last.get("goal_parsed")
+                            if goal:
+                                goals_changed[goal] = goals_changed.get(goal, 0) + 1
+                        else:
+                            refused_count += 1
 
     result["event_type"] = "commandment"
     result["message"] = message[:100]
@@ -429,30 +523,35 @@ def on_god_event(data):
     if not world:
         return
     event_type = data.get("type", "")
-    if event_type == "drought":
-        result = world.god_mode.trigger_drought(
-            world, data.get("lat", 0), data.get("lng", 0),
-            data.get("radius", 5), data.get("severity", 0.5),
-            data.get("duration", 50))
-    elif event_type == "plague":
-        result = world.god_mode.trigger_plague(
-            world, data.get("lat", 0), data.get("lng", 0),
-            data.get("radius", 5), data.get("severity", 0.3),
-            data.get("duration", 30))
-    elif event_type == "discovery":
-        result = world.god_mode.trigger_resource_discovery(
-            world, data.get("lat", 0), data.get("lng", 0),
-            data.get("resource", "food"), data.get("amount", 50))
-    elif event_type == "tech":
-        result = world.god_mode.grant_technology(
-            world, agent_id=data.get("agent_id"),
-            skill=data.get("skill", "research"), boost=data.get("boost", 0.2))
-    elif event_type == "climate":
-        result = world.god_mode.modify_climate(
-            world, temperature_delta=data.get("temp_delta", 0),
-            co2_delta=data.get("co2_delta", 0))
-    else:
-        result = {"success": False, "error": f"Unknown event type: {event_type}"}
+    # Serialize the state mutation against the tick loop so a god event applies
+    # cleanly between ticks rather than mid-step.
+    with world_lock:
+        if world is None:
+            return
+        if event_type == "drought":
+            result = world.god_mode.trigger_drought(
+                world, data.get("lat", 0), data.get("lng", 0),
+                data.get("radius", 5), data.get("severity", 0.5),
+                data.get("duration", 50))
+        elif event_type == "plague":
+            result = world.god_mode.trigger_plague(
+                world, data.get("lat", 0), data.get("lng", 0),
+                data.get("radius", 5), data.get("severity", 0.3),
+                data.get("duration", 30))
+        elif event_type == "discovery":
+            result = world.god_mode.trigger_resource_discovery(
+                world, data.get("lat", 0), data.get("lng", 0),
+                data.get("resource", "food"), data.get("amount", 50))
+        elif event_type == "tech":
+            result = world.god_mode.grant_technology(
+                world, agent_id=data.get("agent_id"),
+                skill=data.get("skill", "research"), boost=data.get("boost", 0.2))
+        elif event_type == "climate":
+            result = world.god_mode.modify_climate(
+                world, temperature_delta=data.get("temp_delta", 0),
+                co2_delta=data.get("co2_delta", 0))
+        else:
+            result = {"success": False, "error": f"Unknown event type: {event_type}"}
     result["event_type"] = event_type
     socketio.emit("god_event_result", result)
 
@@ -477,16 +576,19 @@ def on_chat_with_agent(data):
         socketio.emit("chat_response", {"error": "Agent not found"})
         return
 
-    ws = world.get_local_state(agent.lat, agent.lng)
-    resp = world.llm.generate_direct_chat(agent, message, context, ws)
+    with world_lock:
+        if world is None:
+            return
+        ws = world.get_local_state(agent.lat, agent.lng)
+        resp = world.llm.generate_direct_chat(agent, message, context, ws)
 
-    agent.last_dialogue = resp.get("text")
-    agent.dialogue_history.append({
-        "tick": world.tick, "partner": "USER",
-        "text": resp.get("text", ""), "user_said": message,
-    })
-    if len(agent.dialogue_history) > 10:
-        agent.dialogue_history.pop(0)
+        agent.last_dialogue = resp.get("text")
+        agent.dialogue_history.append({
+            "tick": world.tick, "partner": "USER",
+            "text": resp.get("text", ""), "user_said": message,
+        })
+        if len(agent.dialogue_history) > 10:
+            agent.dialogue_history.pop(0)
 
     socketio.emit("chat_response", {
         "agent_id": agent.id,
@@ -514,16 +616,19 @@ def on_chat_with_group(data):
         socketio.emit("group_chat_response", {"error": "No agents found"})
         return
 
-    responses = world.llm.generate_group_chat(agents, message, context)
+    with world_lock:
+        if world is None:
+            return
+        responses = world.llm.generate_group_chat(agents, message, context)
 
-    for resp, agent in zip(responses, agents):
-        agent.last_dialogue = resp.get("text")
-        agent.dialogue_history.append({
-            "tick": world.tick, "partner": "USER",
-            "text": resp.get("text", ""), "user_said": message,
-        })
-        if len(agent.dialogue_history) > 10:
-            agent.dialogue_history.pop(0)
+        for resp, agent in zip(responses, agents):
+            agent.last_dialogue = resp.get("text")
+            agent.dialogue_history.append({
+                "tick": world.tick, "partner": "USER",
+                "text": resp.get("text", ""), "user_said": message,
+            })
+            if len(agent.dialogue_history) > 10:
+                agent.dialogue_history.pop(0)
 
     socketio.emit("group_chat_response", {"responses": responses})
 

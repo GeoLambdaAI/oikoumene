@@ -267,14 +267,17 @@ class GodMode:
     def _apply_drought(self, world, effect: ActiveEffect):
         """Reduce food and water regen in the drought area (applied once).
 
-        Snapshots the affected cells' pre-drought regen values onto the effect so
-        ``_revert_drought`` can restore them exactly (idempotent baseline pattern,
-        as used by the macro/ice-age coupling). This avoids the multiplicative
-        drift of the previous per-tick apply + approximate-inverse revert.
+        Records a per-cell multiplicative factor into the ResourceMap's
+        persistent ``drought_food_factor`` / ``drought_water_factor`` arrays and
+        applies it to the current regen. Because the era's authoritative regen
+        writer (paleo ice-age / modern macro bridge) multiplies by these factors
+        when it rebuilds regen, the drought is no longer silently overwritten at
+        the next macro or ice-age tick. Stored per-cell so ``_revert_drought``
+        removes exactly this drought's contribution, even with overlapping
+        droughts.
         """
         res = world.resources
-        food_snap: dict[tuple[int, int], float] = {}
-        water_snap: dict[tuple[int, int], float] = {}
+        cells: dict[tuple[int, int], float] = {}
         for r in range(res.rows):
             lat = res.lat_max - (r + 0.5) * res.cell_size_deg
             for c in range(res.cols):
@@ -283,20 +286,23 @@ class GodMode:
                 if dist <= effect.radius_deg:
                     proximity = 1.0 - dist / effect.radius_deg
                     reduction = effect.severity * proximity
-                    food_snap[(r, c)] = float(res.food_regen[r, c])
-                    water_snap[(r, c)] = float(res.water_regen[r, c])
-                    res.food_regen[r, c] *= max(0.1, 1.0 - reduction)
-                    res.water_regen[r, c] *= max(0.1, 1.0 - reduction)
-        effect.params["_food_baseline"] = food_snap
-        effect.params["_water_baseline"] = water_snap
+                    factor = max(0.1, 1.0 - reduction)  # in [0.1, 1.0], never 0
+                    cells[(r, c)] = factor
+                    res.drought_food_factor[r, c] *= factor
+                    res.drought_water_factor[r, c] *= factor
+                    res.food_regen[r, c] *= factor
+                    res.water_regen[r, c] *= factor
+        effect.params["_drought_cells"] = cells
 
     def _revert_drought(self, world, effect: ActiveEffect):
-        """Restore the exact pre-drought regen rates from the saved snapshot."""
+        """Remove this drought's contribution from the persistent factors and
+        the current regen (factors are in [0.1, 1.0], so division is safe)."""
         res = world.resources
-        for (r, c), val in effect.params.get("_food_baseline", {}).items():
-            res.food_regen[r, c] = val
-        for (r, c), val in effect.params.get("_water_baseline", {}).items():
-            res.water_regen[r, c] = val
+        for (r, c), factor in effect.params.get("_drought_cells", {}).items():
+            res.drought_food_factor[r, c] /= factor
+            res.drought_water_factor[r, c] /= factor
+            res.food_regen[r, c] /= factor
+            res.water_regen[r, c] /= factor
 
     def _apply_plague_tick(self, world, effect: ActiveEffect):
         """Apply plague health damage to agents in area."""
@@ -363,7 +369,10 @@ class GodMode:
             (1.0 - agent.traits["intelligence"] * 0.3) * 0.2,
             0.1, 0.95
         )
-        complied = np.random.random() < compliance_prob
+        # Use the world's seeded RNG (not the global np.random) so a god-mode
+        # run remains reproducible for a fixed seed.
+        rng = getattr(world, "rng", None) or np.random
+        complied = rng.random() < compliance_prob
 
         goal_parsed = self._parse_goal_from_message(text)
         effect_description = ""

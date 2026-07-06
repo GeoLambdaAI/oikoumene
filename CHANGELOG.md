@@ -163,6 +163,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   settlement pruning bounds the count, and nation-stat aggregation is now
   O(agents + memberships) instead of O(settlements × agents).
 
+## [0.3.1] - 2026-07-06
+
+Security & correctness patch. No breaking API changes; shipped ahead of the v0.4
+empirical-data work (which remains in `[Unreleased]`).
+
+### Security — web/SocketIO surface hardening (`app.py`, `llm_module.py`, `templates/index.html`)
+
+- **API-key exfiltration closed.** `LLMModule.update_config` now binds the API
+  key to `base_url`: changing `base_url` to a new host without re-supplying the
+  key clears it, so an attacker can no longer redirect the endpoint and have the
+  operator's Bearer token forwarded to their server.
+- **SSRF guard.** `base_url` is validated (http/https only; cloud-metadata and
+  link-local ranges blocked; optional `WORLD_GENESIS_LLM_ALLOWED_HOSTS`
+  allowlist) at config time and again before every outbound LLM request.
+- **Stored/DOM XSS fixed.** Added an `escapeHtml()` helper and applied it to
+  every dynamic value interpolated into `innerHTML` (dialogue feed, chat
+  bubbles, god/LLM responses, nation/settlement names, LLM model/error strings).
+- **Input validation** on unauthenticated SocketIO events: `reset` clamps agent
+  count/seed/scenario, `set_speed` rejects NaN/inf, `set_llm_config` type-checks
+  and clamps every field.
+
+### Fixed — simulation-core correctness
+
+- **Concurrency (`app.py`).** The background tick loop now uses a generation
+  token plus a world-mutation lock, so a reset/JEPA-swap/restart can no longer
+  leave a stale loop double-stepping the world or interleaving mid-tick.
+- **present_day nations no longer self-delete.** Scenario-seeded real countries
+  are flagged `seeded` and are exempt from the empty-nation prune and stat
+  zeroing (previously all ~140 nations plus the NATO/EU/BRICS graph were wiped
+  ~10 ticks in).
+- **Reproducibility.** Tech-discovery and god-mode compliance draws now use the
+  world's seeded RNG (not the global `np.random`); `Business`/nation id counters
+  reset per `World`; `get_spawn_locations` honours the world seed.
+- **Scientific logger** starts in the `present_day` scenario (was skipped by an
+  early return) and `end_run()` is idempotent and called on reset (was never
+  called — leaked the CSV handle and truncated runs).
+- **Climate handoff continuity.** The macro `_vector_to_state` clamps were
+  widened so the paleo→macro handoff's negative Little-Ice-Age anomaly (−0.3 °C,
+  283 ppm) is no longer snapped to 0 on the first ODE step; the handoff now also
+  recomputes derived fields immediately.
+- **Resource-regen ownership.** Paleo ice-age effects are gated to the paleo era
+  and god-mode drought is modelled as a persistent multiplicative factor that
+  the macro bridge and ice-age both compose with — a drought is no longer erased
+  at the next macro/ice tick, and per-cell baselines are captured pristine at
+  init rather than ~50 ticks late.
+- **Bounded growth.** Settlement membership sets are pruned to living members,
+  `negotiation_history` is capped, and a removed nation's id is purged from every
+  other nation's alliance/rival sets.
+- **Agent fixes.** Velocity observations are normalised by the era-scaled max
+  speed (were reaching ±20 and dominating the JEPA encoder); death cause
+  distinguishes starvation / old_age / illness; `_action_migrate` clamps latitude
+  and wraps longitude; historical spawns top up to the requested count instead of
+  silently under-populating.
+
 ## [0.3.0] - 2026-05-25
 
 Adds the PyTorch JEPA backend that earlier releases listed as a v0.3

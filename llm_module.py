@@ -21,11 +21,15 @@ Reference: LeCun (2022) "A Path Towards Autonomous Machine Intelligence"
 Section 3.3: Theory of Mind for social agents.
 """
 
+import ipaddress
 import json
+import os
 import re
+import socket
 import time
 from dataclasses import dataclass, field
 from typing import Optional, Any
+from urllib.parse import urlparse
 
 import numpy as np
 
@@ -33,6 +37,90 @@ try:
     import requests
 except ImportError:
     requests = None  # type: ignore
+
+
+# ============================================================================
+# base_url validation (SSRF / API-key-exfiltration hardening)
+# ============================================================================
+#
+# The LLM endpoint (`base_url`) is operator-configurable at runtime, including
+# via the unauthenticated SocketIO control surface. Two abuses must be blocked:
+#
+#   1. API-key exfiltration: pointing base_url at an attacker host so the
+#      configured Bearer token is sent there. Mitigated by (a) refusing to keep
+#      an api_key across a base_url change unless it is re-supplied together
+#      (see LLMModule.update_config), and (b) this egress guard.
+#   2. SSRF: using the server as a proxy to reach cloud-metadata / internal
+#      services (e.g. http://169.254.169.254/...).
+#
+# Default policy blocks link-local (incl. the 169.254.169.254 metadata IP) and
+# other non-routable/reserved ranges. Loopback and private ranges stay allowed
+# because a local Ollama or a LAN model server is the primary, documented use
+# case — and with the api_key no longer following a base_url change, a redirect
+# to those ranges can no longer carry the operator's credential.
+#
+# For stricter deployments, set WORLD_GENESIS_LLM_ALLOWED_HOSTS to a
+# comma-separated hostname allowlist; when set, ONLY those hosts are permitted.
+
+_METADATA_HOSTS = {
+    "169.254.169.254",       # AWS/GCP/Azure/OpenStack IMDS
+    "metadata.google.internal",
+    "metadata",
+}
+
+
+def _env_host_allowlist() -> Optional[set]:
+    raw = os.environ.get("WORLD_GENESIS_LLM_ALLOWED_HOSTS", "").strip()
+    if not raw:
+        return None
+    return {h.strip().lower() for h in raw.split(",") if h.strip()}
+
+
+def validate_base_url(url: str) -> tuple:
+    """
+    Validate an LLM base_url for SSRF safety.
+
+    Returns (ok: bool, reason: str). reason is "" when ok.
+    """
+    if not isinstance(url, str) or not url.strip():
+        return False, "base_url must be a non-empty string"
+
+    parsed = urlparse(url.strip())
+    if parsed.scheme not in ("http", "https"):
+        return False, f"unsupported scheme: {parsed.scheme or '(none)'}"
+    host = parsed.hostname
+    if not host:
+        return False, "base_url has no host"
+    host_l = host.lower()
+
+    allow = _env_host_allowlist()
+    if allow is not None:
+        return (True, "") if host_l in allow else (False, f"host not in allowlist: {host_l}")
+
+    if host_l in _METADATA_HOSTS:
+        return False, "cloud-metadata host is blocked"
+
+    # Resolve the host and reject any address in a link-local / reserved /
+    # multicast / unspecified range. Loopback and private ranges are allowed.
+    try:
+        port = parsed.port  # may raise ValueError for an out-of-range port
+    except ValueError:
+        port = None
+    try:
+        infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
+    except socket.gaierror:
+        # Unresolvable host: let the request itself fail later rather than
+        # guessing. Not an SSRF risk (no connection can be made).
+        return True, ""
+    for info in infos:
+        addr = info[4][0]
+        try:
+            ip = ipaddress.ip_address(addr.split("%")[0])
+        except ValueError:
+            continue
+        if ip.is_link_local or ip.is_multicast or ip.is_unspecified or ip.is_reserved:
+            return False, f"blocked address range: {addr}"
+    return True, ""
 
 
 # ============================================================================
@@ -529,6 +617,12 @@ class LLMModule:
         if requests is None:
             return None
 
+        ok, reason = validate_base_url(self.config.base_url)
+        if not ok:
+            self._error_count += 1
+            self._last_error = f"base_url rejected: {reason}"
+            return None
+
         self._tick_call_count += 1
         self._total_calls += 1
         t0 = time.time()
@@ -662,17 +756,84 @@ class LLMModule:
     # Config & Status
     # ------------------------------------------------------------------
 
-    def update_config(self, data: dict):
-        """Update config from UI. Called by SocketIO event."""
-        for key in ["enabled", "provider", "base_url", "model",
-                     "api_key", "temperature", "max_calls_per_tick"]:
-            if key in data:
-                setattr(self.config, key, data[key])
+    def update_config(self, data: dict) -> dict:
+        """
+        Update config from UI. Called by the (unauthenticated) SocketIO event,
+        so every field is validated and coerced here.
+
+        Security-critical rule: the api_key is bound to base_url. If base_url
+        changes to a different host, any stored api_key is cleared unless a new
+        api_key is supplied in the SAME payload. This prevents an attacker from
+        redirecting base_url to their own server and having the operator's
+        existing credential forwarded to it.
+
+        Returns {"ok": bool, "errors": [str, ...]}.
+        """
+        errors: list = []
+        if not isinstance(data, dict):
+            return {"ok": False, "errors": ["payload must be an object"]}
+
+        if "enabled" in data:
+            self.config.enabled = bool(data["enabled"])
+
+        if "provider" in data:
+            provider = str(data["provider"]).lower()
+            if provider in PROVIDER_PRESETS:
+                self.config.provider = provider
+            else:
+                errors.append(f"unknown provider: {provider}")
+
+        if "model" in data:
+            self.config.model = str(data["model"])[:200]
+
+        if "temperature" in data:
+            try:
+                temp = float(data["temperature"])
+                if temp != temp or temp in (float("inf"), float("-inf")):
+                    raise ValueError
+                self.config.temperature = min(2.0, max(0.0, temp))
+            except (TypeError, ValueError):
+                errors.append("temperature must be a finite number")
+
+        if "max_calls_per_tick" in data:
+            try:
+                self.config.max_calls_per_tick = min(100, max(0, int(data["max_calls_per_tick"])))
+            except (TypeError, ValueError):
+                errors.append("max_calls_per_tick must be an integer")
+
+        # base_url + api_key must be handled together for the key-binding rule.
+        new_base_url = None
+        if "base_url" in data:
+            candidate = str(data["base_url"]).strip()
+            ok, reason = validate_base_url(candidate)
+            if ok:
+                new_base_url = candidate
+            else:
+                errors.append(f"base_url rejected: {reason}")
+
+        base_url_changing = new_base_url is not None and new_base_url != self.config.base_url
+        if new_base_url is not None:
+            self.config.base_url = new_base_url
+
+        if "api_key" in data:
+            # Explicit key provided — accept it (pairs with any base_url change).
+            self.config.api_key = str(data["api_key"])
+        elif base_url_changing and self.config.api_key:
+            # base_url moved to a new host without a fresh key: drop the old key
+            # so it can never be forwarded to the new endpoint.
+            self.config.api_key = ""
+            errors.append("api_key cleared because base_url changed; re-enter the key for the new endpoint")
+
+        return {"ok": not errors, "errors": errors}
 
     def test_connection(self) -> dict:
         """Quick connectivity test."""
         if requests is None:
             return {"success": False, "latency_ms": 0, "error": "requests not installed"}
+
+        ok, reason = validate_base_url(self.config.base_url)
+        if not ok:
+            return {"success": False, "latency_ms": 0, "error": f"base_url rejected: {reason}"}
 
         t0 = time.time()
         try:

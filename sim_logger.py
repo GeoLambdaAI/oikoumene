@@ -205,7 +205,10 @@ class SimulationLogger:
         return self._run_id
 
     def end_run(self):
-        """Finalize and close the run."""
+        """Finalize and close the run. Idempotent: safe to call when no run is
+        active (e.g. on repeated resets) — it simply no-ops."""
+        if not self.is_running and self._csv_file is None:
+            return
         if self._csv_file:
             self._csv_file.flush()
             self._csv_file.close()
@@ -213,6 +216,8 @@ class SimulationLogger:
         self.is_running = False
 
         # Update metadata with end info
+        if self._run_dir is None:
+            return
         meta_path = self._run_dir / "metadata.json"
         if meta_path.exists():
             with open(meta_path) as f:

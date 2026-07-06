@@ -680,6 +680,23 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
 <script>
 // ============================================================================
+// Security helper
+// ============================================================================
+// Escape any dynamic value before it is interpolated into an innerHTML string.
+// Agent dialogue, chat text, god responses, LLM model/error strings and names
+// can all contain attacker- or model-supplied HTML; without escaping they
+// execute as markup in every connected browser (stored/DOM XSS).
+function escapeHtml(value) {
+    if (value === null || value === undefined) return '';
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+// ============================================================================
 // State
 // ============================================================================
 let state = null;
@@ -1066,7 +1083,7 @@ function renderAgentDetail(a) {
     ).join('') : '';
 
     const skills = (a.top_skills || []).map(([name, val]) =>
-        `<div class="skill-row"><span class="skill-name">${name}</span>
+        `<div class="skill-row"><span class="skill-name">${escapeHtml(name)}</span>
          <div class="skill-bar-bg"><div class="skill-bar-fill" style="width:${val*100}%"></div></div>
          <span style="font-size:10px;color:#9ca3af">${(val*100).toFixed(1)}%</span></div>`
     ).join('');
@@ -1078,11 +1095,11 @@ function renderAgentDetail(a) {
     div.innerHTML = `
         <div class="agent-card">
             <div class="agent-header">
-                <span class="agent-name">${a.name}</span>
-                <span class="agent-gen">Gen ${a.generation}</span>
+                <span class="agent-name">${escapeHtml(a.name)}</span>
+                <span class="agent-gen">Gen ${escapeHtml(a.generation)}</span>
             </div>
             <div style="font-size:11px;color:#9ca3af;margin-bottom:6px">
-                Age: ${a.age} | Action: <span style="color:${color}">${a.current_action}</span> | Goal: <span style="color:#c084fc">${a.current_goal}</span>
+                Age: ${escapeHtml(a.age)} | Action: <span style="color:${color}">${escapeHtml(a.current_action)}</span> | Goal: <span style="color:#c084fc">${escapeHtml(a.current_goal)}</span>
             </div>
             <div style="font-size:10px;color:#6b7280;margin-bottom:6px">
                 Lat: ${a.lat.toFixed(2)} | Lng: ${a.lng.toFixed(2)}
@@ -1144,10 +1161,10 @@ function renderEventLog() {
     const log = document.getElementById('event-log');
     log.innerHTML = eventBuffer.slice(0, 80).map(e => {
         if (e.event === 'death') {
-            return `<div class="event-item"><span style="color:#ef4444">&#9760;</span> <span class="event-agent">${e.agent_name}</span> died (${e.cause}, age ${e.age}, gen ${e.generation})</div>`;
+            return `<div class="event-item"><span style="color:#ef4444">&#9760;</span> <span class="event-agent">${escapeHtml(e.agent_name)}</span> died (${escapeHtml(e.cause)}, age ${escapeHtml(e.age)}, gen ${escapeHtml(e.generation)})</div>`;
         }
         const desc = e.outcome?.description || e.action || '';
-        return `<div class="event-item"><span class="event-agent">${e.agent_name}</span> <span class="event-action">${e.action}</span> ${desc ? '- ' + desc : ''}</div>`;
+        return `<div class="event-item"><span class="event-agent">${escapeHtml(e.agent_name)}</span> <span class="event-action">${escapeHtml(e.action)}</span> ${desc ? '- ' + escapeHtml(desc) : ''}</div>`;
     }).join('');
 }
 
@@ -1165,8 +1182,8 @@ function updateSettlementList() {
             const coop = (s.culture && s.culture.cooperation != null) ? (s.culture.cooperation*100).toFixed(0) : '?';
             const innov = (s.culture && s.culture.innovation != null) ? (s.culture.innovation*100).toFixed(0) : '?';
             return `<div class="settlement-item" onclick="map.flyTo([${s.lat||0}, ${s.lng||0}], 8)" style="cursor:pointer">
-                <span class="settlement-name">${s.name||'?'}</span>
-                <div class="settlement-meta">Pop: ${s.population||0} | ${s.governance||'?'} | Treasury: ${treasury}</div>
+                <span class="settlement-name">${escapeHtml(s.name||'?')}</span>
+                <div class="settlement-meta">Pop: ${escapeHtml(s.population||0)} | ${escapeHtml(s.governance||'?')} | Treasury: ${escapeHtml(treasury)}</div>
                 <div class="settlement-meta">Culture: Coop ${coop}% | Innov ${innov}%</div>
             </div>`;
         }).join('');
@@ -1364,7 +1381,7 @@ function updateNationsList(nations, conflicts) {
                 const allies = (n.alliances && n.alliances.length) || 0;
                 const rivals = (n.rivals && n.rivals.length) || 0;
                 return `<div class="settlement-item" onclick="map.flyTo([${lat}, ${lng}], 6)" style="cursor:pointer">
-                    <span class="settlement-name" style="color:#4ade80">${n.name || 'Unknown'}</span>
+                    <span class="settlement-name" style="color:#4ade80">${escapeHtml(n.name || 'Unknown')}</span>
                     <div class="settlement-meta">Pop: ${n.population || 0} | Wealth: ${wealth} | Tech: ${tech}</div>
                     <div class="settlement-meta">
                         Policy: ${(n.carbon_policy || 0) > 0 ? '<span style="color:#22c55e">Green</span>' : '<span style="color:#f97316">Fossil</span>'} |
@@ -1389,8 +1406,8 @@ function updateNationsList(nations, conflicts) {
                 const intensity = (c.intensity != null) ? (c.intensity * 100).toFixed(0) : '?';
                 const names = (c.nation_names && c.nation_names.join) ? c.nation_names.join(' vs ') : (c.cause || 'Conflict');
                 return `<div class="settlement-item" onclick="map.flyTo([${lat}, ${lng}], 6)" style="cursor:pointer;border-left:3px solid #ef4444">
-                    <div style="color:#ef4444;font-weight:600;font-size:12px">${names}</div>
-                    <div class="settlement-meta">Intensity: ${intensity}% | Duration: ${c.duration || 0} | Cause: ${c.cause || '?'}</div>
+                    <div style="color:#ef4444;font-weight:600;font-size:12px">${escapeHtml(names)}</div>
+                    <div class="settlement-meta">Intensity: ${intensity}% | Duration: ${escapeHtml(c.duration || 0)} | Cause: ${escapeHtml(c.cause || '?')}</div>
                 </div>`;
             }).join('');
         }
@@ -1442,9 +1459,9 @@ socket.on('llm_test_result', (data) => {
     const el = document.getElementById('llm-test-result');
     if (data.success) {
         el.innerHTML = `<span style="color:#4ade80">Connected!</span> Latency: ${data.latency_ms}ms`;
-        if (data.models) el.innerHTML += `<br>Models: ${data.models.join(', ')}`;
+        if (data.models) el.innerHTML += `<br>Models: ${escapeHtml(data.models.join(', '))}`;
     } else {
-        el.innerHTML = `<span style="color:#ef4444">Failed:</span> ${data.error?.substring(0, 80)}`;
+        el.innerHTML = `<span style="color:#ef4444">Failed:</span> ${escapeHtml(data.error?.substring(0, 80))}`;
     }
 });
 
@@ -1472,9 +1489,9 @@ function updateDialogueFeed() {
     if (!feed) return;
     feed.innerHTML = state.dialogues.slice(-15).reverse().map(d =>
         `<div style="padding:3px 0;border-bottom:1px solid #1e293b">
-            <span style="color:#f0abfc">${d.agent_name}</span>
-            <span style="color:#6b7280;font-size:10px">(${d.action})</span>
-            <div style="color:#d1d5db;font-size:10px;margin-top:1px">${d.text || ''}</div>
+            <span style="color:#f0abfc">${escapeHtml(d.agent_name)}</span>
+            <span style="color:#6b7280;font-size:10px">(${escapeHtml(d.action)})</span>
+            <div style="color:#d1d5db;font-size:10px;margin-top:1px">${escapeHtml(d.text || '')}</div>
         </div>`
     ).join('');
 }
@@ -1611,22 +1628,22 @@ socket.on('god_result', (data) => {
 
         let effectLine = '';
         if (goalChanged) {
-            effectLine = `<div style="font-size:10px;color:#06b6d4;margin-top:3px">Goal changed to: <b>${goalChanged}</b></div>`;
+            effectLine = `<div style="font-size:10px;color:#06b6d4;margin-top:3px">Goal changed to: <b>${escapeHtml(goalChanged)}</b></div>`;
         }
 
         logEl.innerHTML = `<div style="padding:8px;background:#1e293b;border-radius:6px;margin-bottom:6px;border-left:3px solid ${compColor}">
             <div style="display:flex;justify-content:space-between;align-items:center">
-                <span style="font-size:11px;color:#fbbf24;font-weight:600">Whisper → ${name}</span>
+                <span style="font-size:11px;color:#fbbf24;font-weight:600">Whisper → ${escapeHtml(name)}</span>
                 <span style="font-size:9px;color:${compColor};font-weight:600">${compText}</span>
             </div>
-            <div style="font-size:12px;color:#e0e6ed;margin-top:4px;font-style:italic">"${data.agent_response}"</div>
+            <div style="font-size:12px;color:#e0e6ed;margin-top:4px;font-style:italic">"${escapeHtml(data.agent_response)}"</div>
             ${effectLine}
             <div style="font-size:9px;color:#6b7280;margin-top:3px">Divine trust: ${trust} | Compliance: ${complied ? 'yes' : 'no'}</div>
         </div>` + logEl.innerHTML;
     } else if (data.success) {
-        logEl.innerHTML = `<div style="padding:3px;color:#4ade80;font-size:11px">Whisper queued for ${data.agent_name || 'agent'}</div>` + logEl.innerHTML;
+        logEl.innerHTML = `<div style="padding:3px;color:#4ade80;font-size:11px">Whisper queued for ${escapeHtml(data.agent_name || 'agent')}</div>` + logEl.innerHTML;
     } else {
-        logEl.innerHTML = `<div style="padding:3px;color:#ef4444;font-size:11px">Error: ${data.error || 'unknown'}</div>` + logEl.innerHTML;
+        logEl.innerHTML = `<div style="padding:3px;color:#ef4444;font-size:11px">Error: ${escapeHtml(data.error || 'unknown')}</div>` + logEl.innerHTML;
     }
 });
 
@@ -1648,11 +1665,11 @@ socket.on('god_event_result', (data) => {
             const complied = data.complied || 0;
             const refused = data.refused || 0;
             const goals = data.goals_changed || {};
-            const goalStr = Object.entries(goals).map(([g,n]) => `${n}→${g}`).join(', ');
-            detail = `Broadcast to <b>${reached}</b> agents at (${(data.lat||0).toFixed(1)}, ${(data.lng||0).toFixed(1)})<br>` +
-                     `<span style="color:#4ade80">Obeyed: ${complied}</span> | <span style="color:#ef4444">Refused: ${refused}</span>` +
+            const goalStr = Object.entries(goals).map(([g,n]) => `${escapeHtml(n)}→${escapeHtml(g)}`).join(', ');
+            detail = `Broadcast to <b>${escapeHtml(reached)}</b> agents at (${(data.lat||0).toFixed(1)}, ${(data.lng||0).toFixed(1)})<br>` +
+                     `<span style="color:#4ade80">Obeyed: ${escapeHtml(complied)}</span> | <span style="color:#ef4444">Refused: ${escapeHtml(refused)}</span>` +
                      (goalStr ? `<br>Goals changed: ${goalStr}` : '') +
-                     `<br><i>"${data.message || ''}"</i>`;
+                     `<br><i>"${escapeHtml(data.message || '')}"</i>`;
         }
         else if (type === 'drought') detail = `Drought at (${godClickLat.toFixed(1)}, ${godClickLng.toFixed(1)}) — food &amp; water reduced for 50 ticks`;
         else if (type === 'plague') detail = `Plague at (${godClickLat.toFixed(1)}, ${godClickLng.toFixed(1)}) — health damage for 30 ticks`;
@@ -1662,11 +1679,11 @@ socket.on('god_event_result', (data) => {
         else detail = `${type} event triggered`;
 
         logEl.innerHTML = `<div style="padding:6px;background:#1e293b;border-radius:6px;margin-bottom:6px;border-left:3px solid ${color}">
-            <div style="font-size:11px;color:${color};font-weight:600">${icon} ${type.charAt(0).toUpperCase() + type.slice(1)}</div>
+            <div style="font-size:11px;color:${color};font-weight:600">${icon} ${escapeHtml(type.charAt(0).toUpperCase() + type.slice(1))}</div>
             <div style="font-size:11px;color:#d1d5db;margin-top:2px">${detail}</div>
         </div>` + logEl.innerHTML;
     } else {
-        logEl.innerHTML = `<div style="padding:3px;color:#ef4444;font-size:11px">${icon} Failed: ${data.error || 'unknown'}</div>` + logEl.innerHTML;
+        logEl.innerHTML = `<div style="padding:3px;color:#ef4444;font-size:11px">${icon} Failed: ${escapeHtml(data.error || 'unknown')}</div>` + logEl.innerHTML;
     }
 });
 
@@ -1678,8 +1695,8 @@ function updateGodModeUI(stats) {
         if (gm.active_effects && gm.active_effects.length > 0) {
             effectsEl.innerHTML = gm.active_effects.map(e =>
                 `<div style="padding:2px 0;border-bottom:1px solid #1e293b">
-                    <span style="color:${e.type === 'plague' ? '#ef4444' : '#fbbf24'}">${e.type}</span>
-                    at (${e.lat}, ${e.lng}) r=${e.radius}° sev=${e.severity} [${e.remaining}/${e.total} ticks]
+                    <span style="color:${e.type === 'plague' ? '#ef4444' : '#fbbf24'}">${escapeHtml(e.type)}</span>
+                    at (${escapeHtml(e.lat)}, ${escapeHtml(e.lng)}) r=${escapeHtml(e.radius)}° sev=${escapeHtml(e.severity)} [${escapeHtml(e.remaining)}/${escapeHtml(e.total)} ticks]
                 </div>`
             ).join('');
         } else {
@@ -1831,8 +1848,8 @@ function renderChatMessages() {
 
         return `<div style="display:flex;justify-content:${align};margin-bottom:6px">
             <div style="max-width:85%;background:${bg};border-radius:8px;padding:6px 10px;${border}">
-                <div style="font-size:10px;color:${color};font-weight:600;margin-bottom:2px">${m.name}${m.tone && !isUser && !isSystem ? ' <span style="color:#6b7280;font-weight:400">(' + m.tone + ')</span>' : ''}${badge}</div>
-                <div style="font-size:12px;color:#e0e6ed">${m.text}</div>
+                <div style="font-size:10px;color:${color};font-weight:600;margin-bottom:2px">${escapeHtml(m.name)}${m.tone && !isUser && !isSystem ? ' <span style="color:#6b7280;font-weight:400">(' + escapeHtml(m.tone) + ')</span>' : ''}${badge}</div>
+                <div style="font-size:12px;color:#e0e6ed">${escapeHtml(m.text)}</div>
             </div>
         </div>`;
     }).join('');

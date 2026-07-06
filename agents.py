@@ -513,9 +513,15 @@ class Agent:
         obs[16] = world_state.get("social_trust", 0.5)
         obs[17] = world_state.get("governance_stability", 0.5)
 
-        # Velocity [18-19]
-        obs[18] = self.vlat / self.MAX_SPEED
-        obs[19] = self.vlng / self.MAX_SPEED
+        # Velocity [18-19] — normalize by the ERA-SCALED max speed, not the base
+        # MAX_SPEED. Movement is clamped to MAX_SPEED * era_mult (era_mult up to
+        # 20 in fast paleo eras); dividing by the base alone let these two
+        # features reach +/-20 while every other feature is ~[0,1], dominating
+        # the shared JEPA encoder input.
+        era_mult = getattr(self, "_era_speed", 1.0)
+        speed_norm = self.MAX_SPEED * max(era_mult, 1e-6)
+        obs[18] = self.vlat / speed_norm
+        obs[19] = self.vlng / speed_norm
 
         # Traits encoded [20-27]
         for i, trait_name in enumerate(TRAIT_NAMES):
@@ -1085,15 +1091,21 @@ class Agent:
         # Move a large distance
         angle = self.rng.uniform(0, 2 * np.pi)
         move_dist = 2.0 + 3.0 * self.traits["curiosity"]  # 2-5 degrees
-        new_lat = self.lat + np.sin(angle) * move_dist
-        new_lng = self.lng + np.cos(angle) * move_dist
+        # Clamp latitude to the habitable band and WRAP longitude at the
+        # antimeridian, so the probe (and the resulting position) is always a
+        # valid coordinate. Without this, new_lng could exceed +/-180 and
+        # is_land would silently read a clamped, wrong grid cell near the edge.
+        new_lat = float(np.clip(self.lat + np.sin(angle) * move_dist,
+                                self.LAT_MIN, self.LAT_MAX))
+        new_lng = _wrap_longitude(self.lng + np.cos(angle) * move_dist)
 
         # Ensure we land on land
         attempts = 0
         while not is_land(new_lat, new_lng) and attempts < 8:
             angle += np.pi / 4
-            new_lat = self.lat + np.sin(angle) * move_dist
-            new_lng = self.lng + np.cos(angle) * move_dist
+            new_lat = float(np.clip(self.lat + np.sin(angle) * move_dist,
+                                    self.LAT_MIN, self.LAT_MAX))
+            new_lng = _wrap_longitude(self.lng + np.cos(angle) * move_dist)
             attempts += 1
 
         if is_land(new_lat, new_lng):
@@ -1151,10 +1163,18 @@ class Agent:
             self.health -= 0.03 * (self.age / aging_threshold)
             self.health += 0.01 * self.traits["resilience"]
 
-        # Death check
+        # Death check. Distinguish the three real causes instead of labeling
+        # every health-driven death "old_age": energy exhaustion is starvation;
+        # a health collapse past the aging threshold is old age; a health
+        # collapse before it is premature (disease/plague/conflict damage).
         if self.energy <= 0 or self.health <= 0:
             self.alive = False
-            cause = "starvation" if self.energy <= 0 else "old_age"
+            if self.energy <= 0:
+                cause = "starvation"
+            elif self.age > aging_threshold:
+                cause = "old_age"
+            else:
+                cause = "illness"
             return {"event": "death", "agent_id": self.id, "agent_name": self.name,
                     "cause": cause, "age": self.age, "generation": self.generation}
 

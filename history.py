@@ -647,14 +647,21 @@ MIGRATION_WAVES = [
 ]
 
 
-def get_spawn_locations(year_bp: float, n_agents: int) -> list[tuple[float, float]]:
+def get_spawn_locations(year_bp: float, n_agents: int,
+                        rng=None) -> list[tuple[float, float]]:
     """
     Get spawn locations for initial agents based on the current year.
 
     Early years: agents spawn only in East Africa.
     Later years: agents can spawn in colonized regions.
+
+    ``rng``: the world's seeded RandomState. Threading it in makes spawn
+    locations vary with the world seed (previously a hardcoded RandomState(42)
+    ignored the seed entirely). Falls back to RandomState(42) for callers that
+    do not supply one.
     """
-    rng = np.random.RandomState(42)
+    if rng is None:
+        rng = np.random.RandomState(42)
     available_regions = []
 
     for wave in MIGRATION_WAVES:
@@ -666,7 +673,11 @@ def get_spawn_locations(year_bp: float, n_agents: int) -> list[tuple[float, floa
 
     points = []
     for _ in range(n_agents):
-        # Pick a random available region, weighted toward more recent ones
+        # available_regions is ordered oldest-first (East Africa origin at
+        # index 0). The exponential draw concentrates mass at index 0, so most
+        # agents spawn at the origin and progressively fewer at each younger
+        # migration frontier — matching the demographic reality that the origin
+        # sustained the largest established population.
         idx = min(len(available_regions) - 1, int(rng.exponential(1.5)))
         region = available_regions[idx]
         # Add jitter around the region center
@@ -747,12 +758,17 @@ class HistoricalSimulation:
     Integrated into World.step() via the bridge.
     """
 
-    def __init__(self, start_year_bp: float = 70000):
+    def __init__(self, start_year_bp: float = 70000, rng=None):
         self.year_bp = start_year_bp
         self.paleoclimate = PaleoclimateModel()
         self.geographic = GeographicAdvantage()
         self.evolution = EvolutionModel()
         self.discovered_techs: set[str] = set()
+        # Seeded RNG for stochastic tech discovery. Threading the world's
+        # RandomState in keeps discovery timing (which drives
+        # industrialization_level -> macro CO2/temperature) reproducible for a
+        # fixed seed, instead of leaking to the unseeded global np.random.
+        self.rng = rng if rng is not None else np.random.RandomState()
 
         # Initialize with era-appropriate starting techs
         era = get_era(start_year_bp)
@@ -808,7 +824,7 @@ class HistoricalSimulation:
                 # Discovery probability increases over time past availability
                 years_overdue = tech.year_bp_available - self.year_bp
                 discovery_prob = min(0.5, years_overdue / 500)
-                if np.random.random() < discovery_prob:
+                if self.rng.random() < discovery_prob:
                     self.discovered_techs.add(tech.name)
                     new_techs.append(tech.name)
 

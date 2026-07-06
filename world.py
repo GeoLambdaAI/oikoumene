@@ -19,7 +19,7 @@ from earth import (TerrainType, classify_terrain, get_fertility, is_land,
 from macro import MacroModel
 from geopolitics import GeopoliticalSystem
 from bridge import MacroAgentBridge
-from history import HistoricalSimulation, get_era, get_spawn_locations
+from history import HistoricalSimulation, get_era, get_spawn_locations, TECH_TREE
 from llm_module import LLMModule, LLMConfig
 from god_mode import GodMode, GodModeConfig
 from scenarios import SCENARIOS, ScenarioLoader, ScenarioConfig
@@ -129,6 +129,16 @@ class ResourceMap:
         # iced->non-iced transition so post-glacial recovery seeds fire once.
         self._was_iced: Optional[np.ndarray] = None
 
+        # Persistent multiplicative drought factors (god-mode). These compose
+        # with whichever subsystem is the authoritative regen writer for the era
+        # (paleo ice-age or modern macro bridge), so a drought is not silently
+        # erased when that subsystem rewrites food_regen/water_regen. 1.0 = no
+        # drought; a value < 1 reduces regen. Maintained by god_mode drought
+        # apply/revert and read back in _apply_ice_age_effects and
+        # bridge.apply_macro_to_world.
+        self.drought_food_factor = np.ones((self.rows, self.cols))
+        self.drought_water_factor = np.ones((self.rows, self.cols))
+
     def initialize_from_terrain(self, terrain: np.ndarray, fertility: np.ndarray,
                                minerals_grid=None, freshwater_grid=None,
                                fossil_grid=None):
@@ -183,6 +193,18 @@ class ResourceMap:
                     self.water_regen[r, c] = 0.5 * w
                     self.minerals[r, c] = 40 * m
                     self.minerals_regen[r, c] = 0.3 * m
+
+        # Capture pristine per-cell baselines NOW, from the freshly initialized
+        # terrain x fertility values — before any agent harvest or macro rewrite
+        # touches these arrays. (Previously these were snapshotted lazily on the
+        # first ice-age tick, i.e. ~50 ticks in, capturing already-depleted and
+        # macro-modified state.)
+        self._baseline_food = self.food.copy()
+        self._baseline_food_regen = self.food_regen.copy()
+        self._baseline_wood = self.wood.copy()
+        self._baseline_wood_regen = self.wood_regen.copy()
+        self._baseline_water = self.water.copy()
+        self._was_iced = np.zeros((self.rows, self.cols), dtype=bool)
 
     def get_cell(self, lat: float, lng: float) -> tuple[int, int]:
         """Convert lat/lng to grid row/col."""
@@ -343,6 +365,12 @@ class Settlement:
         living_members = [a for a in agents if a.id in self.members and a.alive]
         self.population = len(living_members)
 
+        # Prune the membership set to living members only. Without this the set
+        # grew without bound over long runs (dead agents were never removed),
+        # leaking memory and making every O(members) pass (nation stats,
+        # geopolitics) progressively slower.
+        self.members = {a.id for a in living_members}
+
         if self.population == 0:
             return
 
@@ -404,9 +432,14 @@ class World:
         self.rng = np.random.RandomState(seed)
         # Reset class-level entity ID counters so a fixed seed yields identical
         # IDs across runs (one World per process; IDs are otherwise monotonic
-        # across instances and would break same-process reproducibility).
+        # across instances and would break same-process reproducibility). ALL
+        # entity counters must be reset — missing Business/nation counters left
+        # business and nation IDs drifting across in-process resets (and let a
+        # fresh emergent nation collide with seeded present_day nation id 1).
         Agent._next_id = 0
         Settlement._next_id = 0
+        Business._next_id = 0
+        GeopoliticalSystem._next_nation_id = 0
         self.tick = 0
         self.cell_size_deg = cell_size_deg
 
@@ -456,7 +489,7 @@ class World:
 
         # Historical simulation (70,000 years of human civilization)
         self.start_year_bp = self.config.get("start_year_bp", 70000)
-        self.history = HistoricalSimulation(start_year_bp=self.start_year_bp)
+        self.history = HistoricalSimulation(start_year_bp=self.start_year_bp, rng=self.rng)
 
         # Macro dynamics (Club of Rome / Earth4All) — activates in Industrial+ era.
         #
@@ -506,13 +539,16 @@ class World:
         if self.scenario.id == "present_day":
             self.scenario_loader.configure_world(self, self.scenario)
             self._rebuild_spatial_grid()
+            # Start the scientific logger here too — the early return previously
+            # skipped start_run(), so present_day runs never logged any ticks.
+            self.logger.start_run(self)
             return
 
         year_bp = self.history.year_bp
 
         if year_bp > 5000:
             # Historical mode: spawn near migration waypoints for current era
-            spawn_points = get_spawn_locations(year_bp, count)
+            spawn_points = get_spawn_locations(year_bp, count, rng=self.rng)
             # Validate all points are on habitable land (not ice, not ocean)
             from earth import is_land
             validated = []
@@ -527,6 +563,22 @@ class World:
                         if is_land(jlat, jlng) and not self.history.paleoclimate.get_ice_mask(year_bp, jlat, jlng):
                             validated.append((jlat, jlng))
                             break
+
+            # Top up if points were dropped (their origin + all jitter retries
+            # landed on ocean/ice), so the run actually starts with `count`
+            # agents instead of silently fewer. Re-draw fresh waypoints; bail out
+            # with a warning only if the world is too glaciated to place them.
+            top_up_attempts = 0
+            while len(validated) < count and top_up_attempts < count * 20:
+                top_up_attempts += 1
+                lat, lng = get_spawn_locations(year_bp, 1, rng=self.rng)[0]
+                jlat = lat + self.rng.normal(0, 5)
+                jlng = lng + self.rng.normal(0, 5)
+                if is_land(jlat, jlng) and not self.history.paleoclimate.get_ice_mask(year_bp, jlat, jlng):
+                    validated.append((jlat, jlng))
+            if len(validated) < count:
+                print(f"[spawn] Warning: placed {len(validated)}/{count} agents "
+                      f"(year_bp={year_bp:.0f}); habitable land is scarce.")
             spawn_points = validated[:count]
         else:
             # Modern era: spread across habitable land
@@ -753,17 +805,8 @@ class World:
             cold_factor = 1.0
 
         res = self.resources
-
-        # Lazy baseline snapshot. First call sees post-init values from
-        # ResourceMap.initialize_from_terrain (terrain x fertility), since
-        # nothing else mutates these arrays before the first paleo tick.
-        if res._baseline_food is None:
-            res._baseline_food = res.food.copy()
-            res._baseline_food_regen = res.food_regen.copy()
-            res._baseline_wood = res.wood.copy()
-            res._baseline_wood_regen = res.wood_regen.copy()
-            res._baseline_water = res.water.copy()
-            res._was_iced = np.zeros((res.rows, res.cols), dtype=bool)
+        # Baselines and _was_iced are captured once in initialize_from_terrain
+        # (pristine terrain x fertility), so nothing to snapshot here.
 
         # Vectorised ice-sheet application. This was a per-cell Python double loop
         # that called get_ice_mask() — which itself recomputes the climate — for
@@ -809,8 +852,12 @@ class World:
 
         # Non-iced cells: rebuild regen from baselines (idempotent, non-ratcheting
         # — the fix for bug (i)). cold_factor scales food regen; wood regen is the
-        # bare baseline (not cold-scaled in the original model).
-        res.food_regen[not_ice] = res._baseline_food_regen[not_ice] * cold_factor
+        # bare baseline (not cold-scaled in the original model). Compose with any
+        # active god-mode drought so this rewrite does not erase it.
+        res.food_regen[not_ice] = (
+            res._baseline_food_regen[not_ice] * cold_factor
+            * res.drought_food_factor[not_ice]
+        )
         res.wood_regen[not_ice] = res._baseline_wood_regen[not_ice]
 
     @staticmethod
@@ -939,13 +986,19 @@ class World:
         if self.tick % 20 == 0 and self.history.year_bp > 5000:
             self._spawn_migration_frontier()
 
-        # Apply paleoclimate ice effects to resources periodically
-        if self.tick % 50 == 0:
-            self._apply_ice_age_effects()
-
         # ---- Macro + Geopolitics integration (every N ticks) ----
         # Macro ODE system: active from start in present_day scenario, else Industrial+ era
         is_modern = self.macro_always_active or self.history.year_bp < 200
+
+        # Apply paleoclimate ice effects to resources periodically — PALEO ERA
+        # ONLY. Continental ice sheets are a Pleistocene phenomenon; once the
+        # macro bridge takes over as the authoritative climate->resource driver
+        # (Industrial+ / present_day), running the ice-age rewrite would just
+        # clobber the bridge's food/water_regen back to the terrain baseline
+        # every 50th tick (cold_factor == 1 with no ice), erasing macro climate
+        # damage until the next macro tick.
+        if self.tick % 50 == 0 and not is_modern:
+            self._apply_ice_age_effects()
 
         # Continuous handoff: the moment a historical run first enters the
         # Industrial era, seed the macro state from the paleoclimate trajectory so
@@ -1077,6 +1130,13 @@ class World:
         s.ocean_acidification = 0.0
         s.technology_level = 1.0      # neutral emission-intensity baseline; grows from here
 
+        # Recompute derived fields (radiative_forcing, food_production_index,
+        # social_tension, human_welfare_index) from the just-seeded state.
+        # Without this they keep their present-day (2025) defaults until the
+        # next macro step, which the UI and agent observations would read for up
+        # to macro_update_interval-1 ticks after the handoff.
+        self.macro._compute_derived()
+
     # ------------------------------------------------------------------
     # Serialization
     # ------------------------------------------------------------------
@@ -1129,8 +1189,10 @@ class World:
         else:
             climate = self.history.paleoclimate.get_climate(self.history.year_bp)
             n_techs = len(self.history.discovered_techs)
-            tech_tree_size = max(1, len(getattr(self.history, "tech_tree", []))
-                                  or 32)  # 32 = current TECH_TREE size
+            # Use the real tech-tree size so this gauge stays correct if the
+            # tree is edited (the old getattr(self.history, "tech_tree", [])
+            # always hit the [] fallback -> hardcoded 32, silently desyncing).
+            tech_tree_size = max(1, len(TECH_TREE))
             # Early-Anthropocene land-use signal (Ruddiman 2003): the simulated
             # civilisation's settled footprint nudges CO2 slightly above the
             # natural paleoclimate baseline, so a growing pre-industrial civ has a

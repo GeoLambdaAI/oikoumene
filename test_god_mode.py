@@ -1,10 +1,12 @@
 """
 Tests for god_mode world interventions.
 
-Focus: a drought must reduce regen while active and restore the *exact*
-pre-drought regen rates on expiry — the old implementation re-applied the
-reduction every tick and reverted with an approximate inverse, leaving
-permanent multiplicative drift.
+Focus: a drought must reduce regen while active and restore the pre-drought
+regen rates on expiry (to floating-point tolerance). Drought is now modeled as
+a persistent multiplicative factor that the era's climate driver (paleo
+ice-age / modern macro bridge) composes with, so it is no longer silently
+overwritten mid-life; revert removes that factor (float division), which is
+exact to ~1e-12 rather than bit-identical.
 """
 import numpy as np
 
@@ -23,13 +25,13 @@ def test_drought_reduces_then_restores_exactly():
     during = world.resources.food_regen.copy()
     assert (during < before - 1e-12).any(), "drought did not reduce any regen cells"
 
-    # Tick past expiry; drought is applied once (not per tick) and reverted exactly.
+    # Tick past expiry; drought is applied once (not per tick) and reverted.
     for _ in range(4):
         gm.update(world)
 
     after = world.resources.food_regen.copy()
-    assert np.array_equal(after, before), (
-        "regen not restored to the exact pre-drought baseline after expiry"
+    assert np.allclose(after, before, rtol=1e-12, atol=1e-12), (
+        "regen not restored to the pre-drought baseline after expiry"
     )
 
 

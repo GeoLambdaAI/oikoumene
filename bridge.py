@@ -266,9 +266,17 @@ class MacroAgentBridge:
         # --- Rebuild regen rates from cached baselines (no compounding) ---
         # food_regen baseline is the derived per-terrain * fertility grid; water
         # and minerals from their snapshots. Only land cells are written.
+        # Compose with any active god-mode drought factor so this rewrite does
+        # not erase a drought (which otherwise vanished at the next macro tick).
         combined = temp_factor * pollution_factor * water_factor
-        resource_map.food_regen[land] = self._base_food_regen[land] * combined[land]
-        resource_map.water_regen[land] = self._base_water_regen[land] * water_factor[land]
+        resource_map.food_regen[land] = (
+            self._base_food_regen[land] * combined[land]
+            * resource_map.drought_food_factor[land]
+        )
+        resource_map.water_regen[land] = (
+            self._base_water_regen[land] * water_factor[land]
+            * resource_map.drought_water_factor[land]
+        )
         resource_map.minerals_regen[land] = (
             self._base_minerals_regen[land] * mineral_remaining
         )

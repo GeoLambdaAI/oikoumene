@@ -60,6 +60,13 @@ class NationState:
 
     age: int = 0
 
+    # Scenario-anchored nation (e.g. a real country seeded by the present_day
+    # scenario). Seeded nations are macro-actors defined by their centre
+    # coordinates and seeded aggregate stats; they have no member settlements at
+    # init and must NOT be pruned as "empty", nor have their seeded stats zeroed
+    # until/unless emergent settlements actually join them.
+    seeded: bool = False
+
 
 # Name generation for emergent nations
 _NATION_PREFIXES = [
@@ -91,6 +98,9 @@ class GeopoliticalSystem:
     """
 
     _next_nation_id: int = 0
+
+    # Cap on retained climate-summit records (bounds long-run memory growth).
+    _MAX_NEGOTIATION_HISTORY: int = 500
 
     # Conflict-probability model coefficients (logistic regression on dyad-tick).
     #
@@ -125,6 +135,33 @@ class GeopoliticalSystem:
     NATION_FORMATION_POP = 10         # Min population to form a nation
     NATION_MERGE_DISTANCE = 8.0       # Degrees: settlements close enough to merge
 
+    # --- Conflict-onset realism controls (see _assess_conflicts) -------------
+    # Geographic gating: only dyads within this great-circle distance
+    # (deg-equivalents, ~111 km/deg) are eligible to ignite. Interstate war is
+    # overwhelmingly proximate — Bremer (1992) "Dangerous Dyads"; Vasquez (1993)
+    # territorial theory. 20° (~2200 km) keeps the 5-nation calibration cluster
+    # (max dyad 11.3°) fully connected while excluding globally-implausible
+    # pairings (e.g. Chile–Mongolia) that the ungated all-pairs loop admitted.
+    CONFLICT_MAX_DYAD_DEG = 20.0
+
+    # N-aware onset normalization. The per-dyad logistic rate is calibrated on a
+    # ~5-nation regional bloc (~10 dyads; test_geopolitics). Ungated, the
+    # aggregate onset grew ~linearly with the dyad count — igniting ~12
+    # new wars per assessment in the 140-nation present-day world. We hold the
+    # aggregate onset roughly constant above a reference number of eligible
+    # dyads (global interstate-war onset does not scale with the number of
+    # country-pairs). scale = min(1, REFERENCE / n_eligible), so it is exactly
+    # 1.0 for any bloc ≤ REFERENCE dyads and the small-N calibration is untouched.
+    # Calibrated (present-day, 1178 eligible dyads) to ~1 new interstate-conflict
+    # onset/year and a stable ~8–10 active conflicts — in the UCDP interstate/
+    # internationalized envelope, versus ~12 new wars per assessment ungated.
+    CONFLICT_DYAD_REFERENCE = 500
+
+    # Onset spin-up: a seeded present-day snapshot is a frozen state; new
+    # tensions phase in over the first few assessments (~0.83 yr each) instead
+    # of igniting maximally at t=0, removing the start-of-run onset transient.
+    CONFLICT_SPINUP_ASSESSMENTS = 3
+
     def __init__(self, rng: Optional[np.random.RandomState] = None):
         self.nations: list[NationState] = []
         self.relation_graph = nx.DiGraph()   # Weighted edges: +alliance, -rivalry
@@ -132,6 +169,7 @@ class GeopoliticalSystem:
         self.active_conflicts: list[dict] = []
         self.negotiation_history: list[dict] = []
         self.rng = rng or np.random.RandomState(42)
+        self._conflict_assessments = 0       # for the onset spin-up ramp
 
     # ------------------------------------------------------------------
     # Main Update (called each macro tick)
@@ -220,18 +258,26 @@ class GeopoliticalSystem:
                 self.relation_graph.add_node(nation.id)
                 self.trade_graph.add_node(nation.id)
 
-        # Remove dead nations (no living settlements)
+        # Remove dead nations (no living settlements). Seeded scenario nations
+        # (real countries in present_day) are anchored by their centre coords and
+        # seeded stats, so they persist even with zero member settlements.
         living_settlement_ids = {s.id for s in settlements if s.population > 0}
         for nation in self.nations[:]:
             nation.settlement_ids = [
                 sid for sid in nation.settlement_ids
                 if sid in living_settlement_ids
             ]
-            if not nation.settlement_ids:
+            if not nation.settlement_ids and not nation.seeded:
                 self.relation_graph.remove_node(nation.id)
                 if nation.id in self.trade_graph:
                     self.trade_graph.remove_node(nation.id)
                 self.nations.remove(nation)
+                # Purge dangling references to the removed nation from every
+                # surviving nation's alliance/rival sets, else phantom ids
+                # accumulate and inflate the "shared alliances" conflict term.
+                for other in self.nations:
+                    other.alliances.discard(nation.id)
+                    other.rivals.discard(nation.id)
 
     @staticmethod
     def _great_circle_deg(lat1: float, lng1: float,
@@ -264,6 +310,10 @@ class GeopoliticalSystem:
             if s.id in nation.settlement_ids and s.population > 0:
                 coords.append((s.lat, s.lng))
         if not coords:
+            # Seeded nations are anchored by their stored centre, so nearby
+            # emergent settlements can still be assigned to them by proximity.
+            if nation.seeded:
+                return (nation.center_lat, nation.center_lng)
             return None
         return (
             np.mean([c[0] for c in coords]),
@@ -291,9 +341,13 @@ class GeopoliticalSystem:
             for sid in nation.settlement_ids:
                 members.extend(settlement_agents.get(sid, []))
 
-            nation.population = len(members)
             if not members:
+                # Seeded scenario nations keep their seeded macro stats
+                # (real-world population/wealth) until emergent settlements join.
+                if not nation.seeded:
+                    nation.population = len(members)  # 0 for empty emergent nation
                 continue
+            nation.population = len(members)
 
             nation.total_wealth = max(0.0, sum(a.wealth for a in members))
             nation.total_military = sum(a.skills.get_level("combat") for a in members)
@@ -473,55 +527,69 @@ class GeopoliticalSystem:
             if conflict["intensity"] < 0.05 or conflict["duration"] > 25:
                 self.active_conflicts.remove(conflict)
 
+        self._conflict_assessments += 1
         if len(self.nations) < 2:
             return
 
-        # Assess each nation dyad
-        for i, na in enumerate(self.nations):
-            for j, nb in enumerate(self.nations):
-                if i >= j:
-                    continue
+        # --- Geographic gating -------------------------------------------------
+        # Collect only proximate dyads; distant pairs cannot ignite (see class
+        # constant docstring). O(N²) distance scan, but each check is cheap.
+        eligible: list[tuple] = []
+        nations = self.nations
+        n = len(nations)
+        for i in range(n):
+            na = nations[i]
+            for j in range(i + 1, n):
+                nb = nations[j]
+                dist = self._great_circle_deg(
+                    na.center_lat, na.center_lng, nb.center_lat, nb.center_lng)
+                if dist <= self.CONFLICT_MAX_DYAD_DEG:
+                    eligible.append((na, nb, dist))
 
-                # Skip if already in conflict
-                already = any(
-                    c for c in self.active_conflicts
-                    if set(c["nations"]) == {na.id, nb.id}
-                )
-                if already:
-                    continue
+        # --- N-aware normalization + spin-up ----------------------------------
+        n_elig = len(eligible)
+        n_scale = min(1.0, self.CONFLICT_DYAD_REFERENCE / n_elig) if n_elig else 1.0
+        spinup = min(1.0, self._conflict_assessments / self.CONFLICT_SPINUP_ASSESSMENTS)
+        onset_scale = n_scale * spinup
 
-                prob = self.conflict_probability(na, nb, macro_state)
+        # Assess each eligible dyad
+        for na, nb, dist in eligible:
+            # Skip if already in conflict
+            already = any(
+                c for c in self.active_conflicts
+                if set(c["nations"]) == {na.id, nb.id}
+            )
+            if already:
+                continue
 
-                if self.rng.random() < prob:
-                    # New conflict
-                    midpoint_lat = (na.center_lat + nb.center_lat) / 2
-                    midpoint_lng = (na.center_lng + nb.center_lng) / 2
-                    dist = self._great_circle_deg(
-                        na.center_lat, na.center_lng,
-                        nb.center_lat, nb.center_lng,
-                    )
+            prob = self.conflict_probability(na, nb, macro_state) * onset_scale
 
-                    self.active_conflicts.append({
-                        "nations": [na.id, nb.id],
-                        "nation_names": [na.name, nb.name],
-                        "lat": midpoint_lat,
-                        "lng": midpoint_lng,
-                        "radius": max(3.0, dist * 0.4),
-                        "intensity": 0.3 + 0.4 * macro_state.social_tension,
-                        "duration": 0,
-                        "cause": "resource_competition" if macro_state.fossil_fuels < 0.5
-                                 else "territorial",
-                    })
+            if self.rng.random() < prob:
+                # New conflict
+                midpoint_lat = (na.center_lat + nb.center_lat) / 2
+                midpoint_lng = (na.center_lng + nb.center_lng) / 2
 
-                    # Worsen relations symmetrically. Use add_edge for both
-                    # directions so a one-sided edge can never KeyError on the
-                    # reverse write (edges are normally created in pairs by
-                    # _update_relations; this stays robust if that ever changes).
-                    if self.relation_graph.has_edge(na.id, nb.id):
-                        w = self.relation_graph[na.id][nb.id]["weight"]
-                        new_w = max(-1.0, w - 0.3)
-                        self.relation_graph.add_edge(na.id, nb.id, weight=new_w)
-                        self.relation_graph.add_edge(nb.id, na.id, weight=new_w)
+                self.active_conflicts.append({
+                    "nations": [na.id, nb.id],
+                    "nation_names": [na.name, nb.name],
+                    "lat": midpoint_lat,
+                    "lng": midpoint_lng,
+                    "radius": max(3.0, dist * 0.4),
+                    "intensity": 0.3 + 0.4 * macro_state.social_tension,
+                    "duration": 0,
+                    "cause": "resource_competition" if macro_state.fossil_fuels < 0.5
+                             else "territorial",
+                })
+
+                # Worsen relations symmetrically. Use add_edge for both
+                # directions so a one-sided edge can never KeyError on the
+                # reverse write (edges are normally created in pairs by
+                # _update_relations; this stays robust if that ever changes).
+                if self.relation_graph.has_edge(na.id, nb.id):
+                    w = self.relation_graph[na.id][nb.id]["weight"]
+                    new_w = max(-1.0, w - 0.3)
+                    self.relation_graph.add_edge(na.id, nb.id, weight=new_w)
+                    self.relation_graph.add_edge(nb.id, na.id, weight=new_w)
 
     def conflict_probability(
         self,
@@ -627,6 +695,11 @@ class GeopoliticalSystem:
                 "participants": len(self.nations),
                 "avg_pledge": np.mean([n.climate_pledge for n in self.nations]),
             })
+            # Bound the history so it does not grow without limit over a long run.
+            if len(self.negotiation_history) > self._MAX_NEGOTIATION_HISTORY:
+                self.negotiation_history = (
+                    self.negotiation_history[-self._MAX_NEGOTIATION_HISTORY:]
+                )
 
     # ------------------------------------------------------------------
     # Technology Diffusion

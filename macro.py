@@ -163,9 +163,16 @@ class MacroModel:
 
     def _vector_to_state(self, y: np.ndarray):
         """Unpack ODE state vector into MacroState."""
-        self.state.co2_ppm = max(280.0, y[_IDX["co2"]])
-        self.state.temperature_anomaly = max(0.0, y[_IDX["temp"]])
-        self.state.deep_ocean_temp = max(0.0, y[_IDX["deep_temp"]])
+        # Physically-motivated bounds. The lower bounds must sit BELOW plausible
+        # pre-industrial values so the paleo->macro handoff (which seeds a
+        # negative Little-Ice-Age anomaly ~-0.3 deg C and ~283 ppm CO2) is not
+        # snapped upward on the first ODE step, which would reintroduce exactly
+        # the discontinuity the handoff exists to prevent. Glacial CO2 minimum
+        # ~170 ppm; Last Glacial Maximum anomaly ~-6 deg C. Upper bounds guard
+        # against numerical blow-up (NaN/inf) from a diverging integration.
+        self.state.co2_ppm = float(np.clip(y[_IDX["co2"]], 150.0, 5000.0))
+        self.state.temperature_anomaly = float(np.clip(y[_IDX["temp"]], -10.0, 30.0))
+        self.state.deep_ocean_temp = float(np.clip(y[_IDX["deep_temp"]], -5.0, 20.0))
         self.state.fossil_fuels = np.clip(y[_IDX["fossil"]], 0.0, 1.0)
         self.state.minerals_global = np.clip(y[_IDX["minerals"]], 0.0, 1.0)
         self.state.persistent_pollution = np.clip(y[_IDX["pollution"]], 0.0, 1.0)

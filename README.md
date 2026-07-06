@@ -19,9 +19,15 @@ Each autonomous agent uses a JEPA world model (LeCun 2022; Maes et al. 2026) to 
 [![Tests](https://github.com/GeoLambdaAI/world-genesis/actions/workflows/test.yml/badge.svg)](https://github.com/GeoLambdaAI/world-genesis/actions/workflows/test.yml)
 [![DOI](https://img.shields.io/badge/DOI-pending-lightgrey.svg)](https://www.geolambda.ai)
 
-> **Status:** v0.3.0 — added the optional **PyTorch JEPA backend** (paper-aligned
-> toggles, NumPy/Torch parity tests). Substantial **unreleased work toward v0.4**
-> is in the `[Unreleased]` section of [CHANGELOG.md](CHANGELOG.md):
+> **Status:** v0.3.1 — a **security & correctness patch**: closed an LLM
+> API-key exfiltration path and DOM XSS on the web surface, added SSRF/base-URL
+> validation and input hardening, made the background tick loop reset-safe, and
+> fixed a batch of simulation-core bugs (Present-Day nations no longer
+> self-delete, seeded-RNG reproducibility, logger lifecycle, paleo→macro climate
+> continuity, drought/regen composition). See the `## [0.3.1]` section of
+> [CHANGELOG.md](CHANGELOG.md). v0.3.0 added the optional **PyTorch JEPA
+> backend** (paper-aligned toggles, NumPy/Torch parity tests). Substantial
+> **unreleased work toward v0.4** remains in the `[Unreleased]` section:
 > - the **empirical-input download pipeline** (CHELSA, SoilGrids, ETOPO, HYDE,
 >   UCDP-GED, HadCRUT5) and **Sobol sensitivity analysis** — the downloaders and
 >   their tests are implemented, but the runtime **ingestion is not yet wired**
@@ -287,8 +293,11 @@ for ECS consistency and the carbon-cycle anchor.
 
 ### 3. Geopolitics — Emergent Nation-States
 
-Nations are **never pre-defined**. They emerge organically when agent settlements
-grow large enough and merge. Interstate dynamics follow established models.
+In the **historical** scenario nations are **not pre-defined** — they emerge
+organically when agent settlements grow large enough and merge. The **Present
+Day** scenario instead *seeds* real-world nations (flagged `seeded`) that persist
+as macro-actors and then evolve, absorbing nearby emergent settlements. Both
+share the same interstate dynamics, which follow established models.
 
 **Core references:**
 - Hughes, B. B. (2019). *International Futures (IFs): Building and Using
@@ -474,6 +483,8 @@ altitude, and disease environment have higher survival and reproduction rates.
 | `test_bridge.py` | Behavioural identity of optimised lookups (410-agent run, 0 diffs), 6.2× hot-path speedup, edge cases | 6 |
 | `test_llm_module.py` | Fallback mode, JSON parsing, rate limiting | 9 |
 | `test_agent_state.py` | SoA operations, KDTree, batch metabolism + benchmarks | 4 |
+| `test_security.py` | API-key/`base_url` binding (exfiltration), SSRF/host allowlist, input clamping, `escapeHtml` on every innerHTML sink | 12 |
+| `test_simcore_fixes.py` | Tick-loop generation token, Present-Day nation persistence, seeded-RNG reproducibility, logger lifecycle, macro handoff continuity, drought/regen composition, bounded growth, agent fixes | 24 |
 
 ---
 

@@ -1,7 +1,7 @@
 cff-version: 1.2.0
 message: "If you use this software in research, please cite it as below."
 type: software
-title: "World Genesis: Autonomous Agent Civilization Simulator"
+title: "Oikoumene: Autonomous Agent Civilization Simulator"
 abstract: >-
   A physics-based, AI-driven simulation of human civilization on Planet Earth,
   integrating JEPA world models for agent cognition (LeCun 2022; Maes et al. 2026),

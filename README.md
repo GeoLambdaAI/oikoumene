@@ -6,7 +6,7 @@
   <sub><em>This simulation was developed primarily with Claude Code, Anthropic's agentic CLI, using both Claude Opus 4.6 and Opus 4.7. The collaboration served as a real-world stress test of the latest coding LLM through extensive prompt engineering.</em></sub>
 </p>
 
-# World Genesis: Autonomous Agent Civilization Simulator
+# Oikoumene: Autonomous Agent Civilization Simulator
 
 **A physics-based, AI-driven simulation of human civilization on Planet Earth —
 from the Out-of-Africa migration 70,000 years ago to climate futures beyond 2100.**

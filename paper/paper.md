@@ -1,5 +1,5 @@
 ---
-title: "World Genesis: A Multi-Scale Agent-Based Simulator of Human Civilization with JEPA Cognition and Coupled Earth-System Dynamics"
+title: "Oikoumene: A Multi-Scale Agent-Based Simulator of Human Civilization with JEPA Cognition and Coupled Earth-System Dynamics"
 tags:
   - Python
   - agent-based modelling
@@ -22,7 +22,7 @@ bibliography: paper.bib
 
 # Summary
 
-`World Genesis` is an open-source simulator that couples autonomous agents to
+`Oikoumene` is an open-source simulator that couples autonomous agents to
 a coupled Earth-system, macroeconomic, and geopolitical model on real Earth
 geography. Each agent perceives, plans, and acts through a Joint Embedding
 Predictive Architecture (JEPA) world model [@lecun2022path; @maes2026leworldmodel],

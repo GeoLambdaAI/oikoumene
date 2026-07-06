@@ -1,6 +1,6 @@
 # Security Policy
 
-World Genesis is a research simulation, not a multi-tenant production service.
+Oikoumene is a research simulation, not a multi-tenant production service.
 This document records the threat model the code is hardened against, the
 threats that are explicitly **out of scope**, and how to report a security
 issue responsibly.

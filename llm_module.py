@@ -118,6 +118,12 @@ def validate_base_url(url: str) -> tuple:
             ip = ipaddress.ip_address(addr.split("%")[0])
         except ValueError:
             continue
+        # Loopback (127.0.0.0/8, ::1) is always allowed — it's the local-Ollama
+        # case. Note ::1 has is_reserved == True in Python, so it MUST be
+        # exempted before the block check below (else `localhost` is rejected on
+        # any host that resolves it to IPv6 first, e.g. CI runners).
+        if ip.is_loopback:
+            continue
         if ip.is_link_local or ip.is_multicast or ip.is_unspecified or ip.is_reserved:
             return False, f"blocked address range: {addr}"
     return True, ""

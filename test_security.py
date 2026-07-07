@@ -26,6 +26,7 @@ def test_validate_base_url_allows_local_and_providers():
     for url in [
         "http://localhost:11434",
         "http://127.0.0.1:11434",
+        "http://[::1]:11434",  # IPv6 loopback — is_reserved==True, must still pass
         "https://api.mistral.ai",
         "https://api.openai.com",
     ]:

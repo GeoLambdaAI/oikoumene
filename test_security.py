@@ -49,7 +49,7 @@ def test_validate_base_url_blocks_metadata_and_bad_scheme():
 
 
 def test_validate_base_url_env_allowlist(monkeypatch):
-    monkeypatch.setenv("WORLD_GENESIS_LLM_ALLOWED_HOSTS", "api.mistral.ai")
+    monkeypatch.setenv("OIKOUMENE_LLM_ALLOWED_HOSTS", "api.mistral.ai")
     ok, _ = validate_base_url("https://api.mistral.ai")
     assert ok
     ok, _ = validate_base_url("https://api.openai.com")

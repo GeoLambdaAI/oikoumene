@@ -59,7 +59,7 @@ except ImportError:
 # case — and with the api_key no longer following a base_url change, a redirect
 # to those ranges can no longer carry the operator's credential.
 #
-# For stricter deployments, set WORLD_GENESIS_LLM_ALLOWED_HOSTS to a
+# For stricter deployments, set OIKOUMENE_LLM_ALLOWED_HOSTS to a
 # comma-separated hostname allowlist; when set, ONLY those hosts are permitted.
 
 _METADATA_HOSTS = {
@@ -70,7 +70,7 @@ _METADATA_HOSTS = {
 
 
 def _env_host_allowlist() -> Optional[set]:
-    raw = os.environ.get("WORLD_GENESIS_LLM_ALLOWED_HOSTS", "").strip()
+    raw = os.environ.get("OIKOUMENE_LLM_ALLOWED_HOSTS", "").strip()
     if not raw:
         return None
     return {h.strip().lower() for h in raw.split(",") if h.strip()}

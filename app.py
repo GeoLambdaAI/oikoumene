@@ -1,5 +1,5 @@
 """
-Flask + SocketIO server for World Genesis.
+Flask + SocketIO server for Oikoumene.
 Provides real-time WebSocket updates and a zoomable world map interface.
 """
 
@@ -649,9 +649,9 @@ def on_select_agent(data):
 # ============================================================================
 
 def main() -> None:
-    """Console entry point: launch the World Genesis web server.
+    """Console entry point: launch the Oikoumene web server.
 
-    Exposed as the ``world-genesis`` script via [project.scripts] so the package
+    Exposed as the ``oikoumene`` script via [project.scripts] so the package
     is runnable after ``pip install`` as well as via ``python app.py``.
     """
     port = int(os.environ.get("PORT", 5000))
@@ -662,7 +662,7 @@ def main() -> None:
     create_world()
     display_host = "localhost" if host in ("127.0.0.1", "0.0.0.0") else host
     print("=" * 60)
-    print("  World Genesis — Earth")
+    print("  Oikoumene — Earth")
     print(f"  Open http://{display_host}:{port} in your browser")
     if host == "0.0.0.0":
         print("  WARNING: bound to 0.0.0.0 — reachable from the network.")

@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — empirical ingestion wired (v0.4, first increment)
+
+- **`empirical_ingest.py`** — runtime-safe (pure numpy + stdlib, no GDAL)
+  ingestion layer that turns the downloaded empirical datasets into simulator
+  inputs at init, kept separate from the rasterio/GDAL downloaders so the
+  runtime never depends on them.
+- **UCDP-GED conflict anchoring.** The `present_day` scenario now seeds its
+  initial active conflicts from real Uppsala Conflict Data Program georeferenced
+  events (`derive_conflicts_from_ucdp`): recent events are grouped by
+  `conflict_id` into zones with real centroid, fatality-log-scaled intensity,
+  and event-spread radius; the 15 most lethal are seeded — replacing the 10
+  hand-authored entries in `present_day_conflicts.json`. Correctly surfaces
+  Ukraine, Tigray, Gaza, Sudan, the Sahel, etc. Degrades gracefully to the
+  shipped JSON when the (gitignored, optional) dataset is absent.
+- **HadCRUT5 temperature anchoring.** The `present_day` scenario now initializes
+  its starting temperature from the latest observed HadCRUT5 global-mean anomaly
+  (`observed_temperature_anomaly`), **converting from HadCRUT5's 1961–1990
+  baseline to the 1850–1900 pre-industrial baseline the macro model uses** — the
+  offset is derived from the data's own 1850–1900 window (not hardcoded) and
+  reproduces IPCC AR6 (converted 2011–2020 mean = 1.11 °C vs AR6's ~1.09 °C).
+  The full observed record is exposed via `observed_temperature_series` for
+  validating the macro trajectory. Graceful fallback to the JSON value when the
+  dataset is absent; derived macro fields are recomputed so the anchored state
+  is consistent from tick 0.
+- `test_empirical_ingest.py` — UCDP aggregation/ranking/schema/`top_k`/fallback,
+  HadCRUT5 baseline conversion + fallback, and present-day integration tests.
+- **Sobol sensitivity pipeline verified end-to-end** (`scripts/sensitivity.py`,
+  SALib). Confirmed physically sensible variance decomposition of the BAU-2100
+  outputs: `T_2100` dominated by the climate-feedback (ECS) parameter (ST≈0.79),
+  `CO2_2100` by the natural sink fraction + baseline emissions, `Pop_2100` by
+  climate feedback (via damage) then population growth. Documented in
+  `docs/validation.md` §6.
+- Remaining v0.4 empirical wiring (ETOPO elevation, CHELSA climate, SoilGrids
+  fertility, HYDE population) is deferred to a v0.5 "high-fidelity Earth"
+  milestone — those need rasterio/GDAL and large downloads (HYDE alone ~5.3 GB);
+  the downloaders exist but the rasters are not yet ingested.
+
 ### Added — empirical input scaffolding (for v0.4)
 
 - **`generate_empirical_inputs.py`** — downloads and resamples three
@@ -175,7 +212,7 @@ empirical-data work (which remains in `[Unreleased]`).
   key clears it, so an attacker can no longer redirect the endpoint and have the
   operator's Bearer token forwarded to their server.
 - **SSRF guard.** `base_url` is validated (http/https only; cloud-metadata and
-  link-local ranges blocked; optional `WORLD_GENESIS_LLM_ALLOWED_HOSTS`
+  link-local ranges blocked; optional `OIKOUMENE_LLM_ALLOWED_HOSTS`
   allowlist) at config time and again before every outbound LLM request.
 - **Stored/DOM XSS fixed.** Added an `escapeHtml()` helper and applied it to
   every dynamic value interpolated into `innerHTML` (dialogue feed, chat
@@ -704,7 +741,7 @@ release, not a refactor.
 - **`SECURITY.md`** added — threat model, in-scope vs. out-of-scope mitigations, operator deployment checklist, and a vulnerability-disclosure process via GitHub's private vulnerability reporting.
 - Verified that `LLMModule.api_key` is not leaked through `get_status()`, `get_full_state()`, snapshot dumps, or `metadata.json`.
 
-[Unreleased]: https://github.com/GeoLambdaAI/world-genesis/compare/v0.2.1...HEAD
-[0.2.1]: https://github.com/GeoLambdaAI/world-genesis/compare/v0.2.0...v0.2.1
-[0.2.0]: https://github.com/GeoLambdaAI/world-genesis/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/GeoLambdaAI/world-genesis/releases/tag/v0.1.0
+[Unreleased]: https://github.com/GeoLambdaAI/oikoumene/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/GeoLambdaAI/oikoumene/compare/v0.2.0...v0.2.1
+[0.2.0]: https://github.com/GeoLambdaAI/oikoumene/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/GeoLambdaAI/oikoumene/releases/tag/v0.1.0

@@ -90,6 +90,21 @@ class ScenarioLoader:
         })
         self._init_macro(world.macro, climate)
 
+        # 1b. Anchor the starting temperature to the latest HadCRUT5 observation
+        #     (converted to the pre-industrial baseline the macro model uses),
+        #     falling back to the JSON value when the dataset is absent.
+        from empirical_ingest import observed_temperature_anomaly
+        obs = observed_temperature_anomaly()
+        if obs is not None:
+            obs_year, obs_anom, _ = obs
+            world.macro.state.temperature_anomaly = obs_anom
+            print(f"    Temperature: anchored to HadCRUT5 {obs_year} "
+                  f"= {obs_anom:+.2f}°C vs pre-industrial")
+        # Recompute derived macro fields (radiative_forcing, social_tension,
+        # food/welfare indices) from the fully-seeded state so they are correct
+        # from tick 0 rather than the class defaults until the first macro step.
+        world.macro._compute_derived()
+
         # 2. Load resources -> override ResourceMap
         self._init_resources(world)
 
@@ -101,8 +116,15 @@ class ScenarioLoader:
         # 4. Create nations from countries
         self._init_nations(world, countries)
 
-        # 5. Load conflicts
-        conflicts = self._load_json("present_day_conflicts.json", [])
+        # 5. Load conflicts — prefer real UCDP-GED anchoring; fall back to the
+        #    shipped illustrative set when the (gitignored, optional) empirical
+        #    dataset is absent.
+        from empirical_ingest import load_present_day_conflicts
+        conflicts = load_present_day_conflicts()
+        if conflicts:
+            print(f"    Conflicts: {len(conflicts)} zones anchored from UCDP-GED")
+        else:
+            conflicts = self._load_json("present_day_conflicts.json", [])
         self._init_conflicts(world, conflicts)
 
         print(f"  Present-day init: {len(world.agents)} agents, "

@@ -1,6 +1,6 @@
 # Third-Party Data Attributions
 
-World Genesis ships pre-computed Earth-system data derived from public sources.
+Oikoumene ships pre-computed Earth-system data derived from public sources.
 This document lists every dataset, its license, and the attribution required
 when redistributing or citing simulation outputs.
 
@@ -268,7 +268,7 @@ the synthetic layers:
 
 ## How to cite the simulation outputs
 
-If you publish results derived from running World Genesis, please cite:
+If you publish results derived from running Oikoumene, please cite:
 
 1. **The software** — see [`CITATION.cff`](../CITATION.cff) (auto-rendered
    on GitHub as a "Cite this repository" button).

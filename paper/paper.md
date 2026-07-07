@@ -51,7 +51,7 @@ assessment models such as DICE [@nordhaus2017revisiting] and World3
 populations as aggregate stocks; agent-based models such as Sugarscape and
 Schelling-style frameworks deliver emergent behaviour but lack physical
 grounding; large language model agents now match human conversational
-fidelity but have no persistent world model. `World Genesis` bridges these
+fidelity but have no persistent world model. `Oikoumene` bridges these
 traditions: a single shared JEPA world model supplies vector cognition to
 hundreds of agents simultaneously, while a calibrated macro ODE supplies
 the physical and economic constraints those agents inhabit. The result is

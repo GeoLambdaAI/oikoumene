@@ -16,7 +16,7 @@ Each autonomous agent uses a JEPA world model (LeCun 2022; Maes et al. 2026) to 
 
 [![License: AGPL v3+](https://img.shields.io/badge/License-AGPL%20v3+-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![Tests](https://github.com/GeoLambdaAI/world-genesis/actions/workflows/test.yml/badge.svg)](https://github.com/GeoLambdaAI/world-genesis/actions/workflows/test.yml)
+[![Tests](https://github.com/GeoLambdaAI/oikoumene/actions/workflows/test.yml/badge.svg)](https://github.com/GeoLambdaAI/oikoumene/actions/workflows/test.yml)
 [![DOI](https://img.shields.io/badge/DOI-pending-lightgrey.svg)](https://www.geolambda.ai)
 
 > **Status:** v0.3.1 — a **security & correctness patch**: closed an LLM
@@ -45,16 +45,16 @@ Each autonomous agent uses a JEPA world model (LeCun 2022; Maes et al. 2026) to 
 > 
 > **Tested on:**
 > - Ubuntu 22.04 ARM, Python 3.11.
-> - macOS: requires Python 3.11+ (e.g. `conda create -n worldgenesis python=3.11` or `python3.11 -m venv .venv`); Python 3.9 from miniconda base will fail due to eventlet/kqueue incompatibility. Disable AirPlay Receiver or change port from 5000 to 5001 in `app.py`.
+> - macOS: requires Python 3.11+ (e.g. `conda create -n oikoumene python=3.11` or `python3.11 -m venv .venv`); Python 3.9 from miniconda base will fail due to eventlet/kqueue incompatibility. Disable AirPlay Receiver or change port from 5000 to 5001 in `app.py`.
 > 
 > - Windows: untested, please file issues.
 
 <p align="center">
-  <a href="static/world-genesis.jpg">
-    <img src="static/world-genesis.jpg" alt="World Genesis — global view showing autonomous agents distributed across all continents, with live macro state, JEPA agent cognition, and emergent geopolitics side panels" width="820">
+  <a href="static/oikoumene.jpg">
+    <img src="static/oikoumene.jpg" alt="Oikoumene — global view showing autonomous agents distributed across all continents, with live macro state, JEPA agent cognition, and emergent geopolitics side panels" width="820">
   </a>
   <br>
-  <sub><em>World Genesis running the Present-Day scenario — autonomous agents on a real population-density-weighted distribution, with live macro state (CO₂, temperature, population), JEPA agent cognition, and emergent nations.</em></sub>
+  <sub><em>Oikoumene running the Present-Day scenario — autonomous agents on a real population-density-weighted distribution, with live macro state (CO₂, temperature, population), JEPA agent cognition, and emergent nations.</em></sub>
 </p>
 
 ---
@@ -123,15 +123,15 @@ Each autonomous agent uses a JEPA world model (LeCun 2022; Maes et al. 2026) to 
 ### Installation
 
 ```bash
-cd world-genesis-main
+cd oikoumene-main
 pip install numpy flask flask-socketio eventlet scipy networkx shapely requests
 ```
 
 ### Installation (macOS, recommended via Conda)
 
 ```bash
-conda create -n worldgenesis python=3.11 -y
-conda activate worldgenesis
+conda create -n oikoumene python=3.11 -y
+conda activate oikoumene
 pip install -r requirements.txt
 ```
 

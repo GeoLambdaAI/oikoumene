@@ -1,4 +1,4 @@
-# Contributing to World Genesis
+# Contributing to Oikoumene
 
 Thank you for your interest in contributing. This is a scientific simulation
 project where every equation cites a published source — contributions are
@@ -14,8 +14,8 @@ disrespect is not.
 
 ```bash
 # Clone and enter
-git clone https://github.com/GeoLambdaAI/world-genesis.git
-cd world-genesis
+git clone https://github.com/GeoLambdaAI/oikoumene.git
+cd oikoumene
 
 # Virtual environment (recommended)
 python -m venv .venv

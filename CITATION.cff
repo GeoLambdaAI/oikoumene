@@ -16,7 +16,7 @@ authors:
 version: 0.3.1
 date-released: "2026-07-06"
 license: AGPL-3.0-or-later
-repository-code: "https://github.com/GeoLambdaAI/world-genesis"
+repository-code: "https://github.com/GeoLambdaAI/oikoumene"
 url: "https://www.geolambda.ai"
 keywords:
   - agent-based-modeling

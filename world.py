@@ -1,5 +1,5 @@
 """
-World Genesis — simulation engine.
+Oikoumene — simulation engine.
 
 Manages:
 - Real Earth geography with lat/lng coordinate system

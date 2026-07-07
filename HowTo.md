@@ -1,4 +1,4 @@
-# HowTo — Running World Genesis
+# HowTo — Running Oikoumene
 
 A practical, copy-pastable guide. The [`README.md`](README.md) explains
 *what* the simulator does and *why*; this file explains *how* to drive it.
@@ -42,7 +42,7 @@ A practical, copy-pastable guide. The [`README.md`](README.md) explains
 
 ```bash
 # From a fresh clone:
-cd world-genesis-main
+cd oikoumene-main
 
 # Always use a virtual environment — the simulator pulls in eventlet,
 # which monkey-patches the standard library and will surprise you in a
@@ -66,8 +66,8 @@ You can install both: `pip install -e ".[viz,dev]"`.
 ## Installation (macOS, recommended via Conda)
 
 ```bash
-conda create -n worldgenesis python=3.11 -y
-conda activate worldgenesis
+conda create -n oikoumene python=3.11 -y
+conda activate oikoumene
 pip install -r requirements.txt
 ```
 ---
@@ -103,7 +103,7 @@ You should see:
 
 ```
 ============================================================
-  World Genesis — Earth
+  Oikoumene — Earth
   Open http://localhost:5000 in your browser
 ============================================================
 ```
@@ -161,8 +161,8 @@ Persist these in a `.envrc` (direnv) or your shell profile — never commit them
 ## 6. Using the web UI
 
 <p align="center">
-  <a href="static/world-genesis.jpg">
-    <img src="static/world-genesis.jpg" alt="World Genesis web UI — global map with agents, top bar statistics, side panel with agent cognition and nation feed" width="800">
+  <a href="static/oikoumene.jpg">
+    <img src="static/oikoumene.jpg" alt="Oikoumene web UI — global map with agents, top bar statistics, side panel with agent cognition and nation feed" width="800">
   </a>
   <br>
   <sub><em>The Present-Day scenario in motion. Top bar = live macro statistics; map = agents on real Earth; right panel = live JEPA cognition, press feed, and discussions.</em></sub>

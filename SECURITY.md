@@ -45,13 +45,13 @@ Please **do not** open a public GitHub issue for security problems.
 
 **Preferred channel — GitHub private vulnerability reporting.**
 Submit your report at
-[github.com/GeoLambdaAI/world-genesis/security/advisories/new](https://github.com/GeoLambdaAI/world-genesis/security/advisories/new).
+[github.com/GeoLambdaAI/oikoumene/security/advisories/new](https://github.com/GeoLambdaAI/oikoumene/security/advisories/new).
 This gives you an authenticated, end-to-end private thread with the
 maintainers, and the resulting advisory becomes citable once we publish
 the fix.
 
 **Cannot use GitHub?** Reach us through the contact form at
-[www.geolambda.ai](https://www.geolambda.ai) and reference World Genesis
+[www.geolambda.ai](https://www.geolambda.ai) and reference Oikoumene
 plus the word `security` in your message.
 
 In either channel, please include:

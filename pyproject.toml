@@ -3,7 +3,7 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "world-genesis"
+name = "oikoumene"
 version = "0.3.1"
 description = "A physics-based, AI-driven simulation of human civilization on Planet Earth — JEPA agents, macro ODE, emergent geopolitics, real Earth geography."
 readme = "README.md"
@@ -76,12 +76,12 @@ sensitivity = [
 
 [project.urls]
 Homepage = "https://www.geolambda.ai"
-Repository = "https://github.com/GeoLambdaAI/world-genesis"
-Issues = "https://github.com/GeoLambdaAI/world-genesis/issues"
-Changelog = "https://github.com/GeoLambdaAI/world-genesis/blob/main/CHANGELOG.md"
+Repository = "https://github.com/GeoLambdaAI/oikoumene"
+Issues = "https://github.com/GeoLambdaAI/oikoumene/issues"
+Changelog = "https://github.com/GeoLambdaAI/oikoumene/blob/main/CHANGELOG.md"
 
 [project.scripts]
-world-genesis = "app:main"
+oikoumene = "app:main"
 
 [tool.setuptools]
 py-modules = [

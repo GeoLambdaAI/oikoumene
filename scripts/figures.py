@@ -1,5 +1,5 @@
 """
-Figure generation pipeline for World Genesis simulation runs.
+Figure generation pipeline for Oikoumene simulation runs.
 
 Reads ``logs/{run_id}/timeseries.csv`` and produces paper-ready PNGs in
 ``logs/{run_id}/figures/``. Runs without arguments use the most recent
@@ -198,7 +198,7 @@ def fig_ipcc_validation(df: pd.DataFrame, out: Path) -> None:
     """Overlay simulation CO₂ and temperature with IPCC SSP reference points."""
     fig, axes = plt.subplots(1, 2, figsize=(12, 5))
 
-    axes[0].plot(df["tick"], df["macro_co2_ppm"], label="World Genesis BAU",
+    axes[0].plot(df["tick"], df["macro_co2_ppm"], label="Oikoumene BAU",
                  color="black", linewidth=1.8)
     final_x = df["tick"].iloc[-1]
     for name, ref in IPCC_REFERENCES.items():
@@ -207,7 +207,7 @@ def fig_ipcc_validation(df: pd.DataFrame, out: Path) -> None:
     axes[0].legend(fontsize=8, loc="upper left")
     style_axes(axes[0], "CO₂ vs. IPCC SSP scenarios at 2100", "ppm")
 
-    axes[1].plot(df["tick"], df["macro_temperature"], label="World Genesis BAU",
+    axes[1].plot(df["tick"], df["macro_temperature"], label="Oikoumene BAU",
                  color="black", linewidth=1.8)
     for name, ref in IPCC_REFERENCES.items():
         axes[1].scatter(final_x, ref["temperature"], color=ref["color"],

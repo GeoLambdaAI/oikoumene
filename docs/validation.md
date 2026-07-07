@@ -1,4 +1,4 @@
-# Validation Report — World Genesis Macro Model
+# Validation Report — Oikoumene Macro Model
 
 **Version:** 0.3.0
 **Date of validation run:** 2026-05-06
@@ -231,8 +231,8 @@ python scripts/sensitivity.py --n 64      # ~5 min on commodity CPU
 
 ```bash
 # Clean checkout
-git clone https://github.com/GeoLambdaAI/world-genesis.git
-cd world-genesis
+git clone https://github.com/GeoLambdaAI/oikoumene.git
+cd oikoumene
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 

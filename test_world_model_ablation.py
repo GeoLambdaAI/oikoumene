@@ -82,3 +82,24 @@ def test_random_mode_scale_and_bounds() -> None:
 def test_none_mode_action_is_zero() -> None:
     w = World(seed=2, config={"world_model_mode": "none"})
     assert np.array_equal(w.ablation_action(), np.zeros(8))
+
+
+# --- Stage 1b: JEPA seed derived from the world seed --------------------------
+
+def _encoder_weights(w: World) -> dict:
+    return {k: v.copy() for k, v in w.shared_world_model.encoder.params.items()}
+
+
+def test_jepa_init_depends_on_world_seed() -> None:
+    a, b, c = World(seed=1), World(seed=1), World(seed=2)
+    wa, wb, wc = _encoder_weights(a), _encoder_weights(b), _encoder_weights(c)
+    assert all(np.array_equal(wa[k], wb[k]) for k in wa)
+    assert any(not np.array_equal(wa[k], wc[k]) for k in wa)
+
+
+def test_jepa_rebuild_keeps_world_derived_seed() -> None:
+    w = World(seed=4)
+    before = _encoder_weights(w)
+    w.set_jepa_backend("numpy")
+    after = _encoder_weights(w)
+    assert all(np.array_equal(before[k], after[k]) for k in before)

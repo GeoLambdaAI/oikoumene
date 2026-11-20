@@ -31,9 +31,31 @@ from sim_logger import SimulationLogger, LoggerConfig
 log = logging.getLogger(__name__)
 
 WORLD_MODEL_MODES = ("jepa", "none", "random")
+# Neighbour search radii are in degree-equivalents, the same unit as
+# World._distance_deg: 1 deg = 111 km on a sphere of radius 6371 km.
+_KM_PER_DEG_EQUIV = 111.0
+_EARTH_RADIUS_KM = 6371.0
+
+
+def _unit_sphere_xyz(lat: np.ndarray, lng: np.ndarray) -> np.ndarray:
+    """(lat, lng) in degrees -> (N, 3) unit-sphere coordinates."""
+    phi, lam = np.radians(lat), np.radians(lng)
+    return np.column_stack([np.cos(phi) * np.cos(lam), np.cos(phi) * np.sin(lam), np.sin(phi)])
+
+
+def _chord_for_radius_deg(radius_deg: float) -> float:
+    """Chord length on the unit sphere equal to a great-circle radius in degree-equivalents."""
+    angle = radius_deg * _KM_PER_DEG_EQUIV / _EARTH_RADIUS_KM
+    return float(2.0 * np.sin(angle / 2.0))
+
+
 # Offset for the ablation RNG stream; any constant works, it only has to keep
 # the "random" steering draws off the main world RNG.
 _STEERING_RNG_OFFSET = 104_729
+# Offset for the shared JEPA seed. Derived from the world seed so weight init,
+# CEM and SIGReg draws vary with it; the offset keeps the JEPA streams (which
+# use s, s+7, s+13) from replaying the main world RNG sequence RandomState(seed).
+_JEPA_SEED_OFFSET = 7_919
 
 
 def _torch_available() -> bool:
@@ -522,7 +544,8 @@ class World:
         # Shared JEPA world model — all agents use this single model.
         # Backend (numpy default / torch) and preset are swappable at runtime
         # via set_jepa_backend(); the dashboard exposes this as a knob.
-        self.shared_world_model = SharedWorldModel(obs_dim=40, action_dim=8, latent_dim=24)
+        self.shared_world_model = SharedWorldModel(obs_dim=40, action_dim=8, latent_dim=24,
+                                                   seed=seed + _JEPA_SEED_OFFSET)
         self.jepa_preset = "default"
 
         # World-model ablation (scripts/ablation_world_model.py):
@@ -623,13 +646,19 @@ class World:
             nearest.members.add(agent.id)
 
     def _rebuild_spatial_grid(self):
-        """Rebuild cKDTree from alive agent positions. O(N log N)."""
+        """Rebuild cKDTree on unit-sphere xyz of alive agents. O(N log N).
+
+        Indexing 3D unit vectors (not raw lat/lng degrees) makes the radius
+        query a true great-circle query: no shrinkage of east-west distances
+        with latitude and no break at the 180 deg meridian.
+        """
         from scipy.spatial import cKDTree
         alive = [a for a in self.agents if a.alive]
         self._kdtree_alive = alive
         if alive:
-            positions = np.array([[a.lat, a.lng] for a in alive])
-            self._kdtree = cKDTree(positions)
+            lat = np.array([a.lat for a in alive])
+            lng = np.array([a.lng for a in alive])
+            self._kdtree = cKDTree(_unit_sphere_xyz(lat, lng))
         else:
             self._kdtree = None
 
@@ -640,10 +669,13 @@ class World:
         return np.zeros(8)
 
     def get_nearby_agents(self, lat: float, lng: float, radius: float) -> list:
-        """Fast spatial query using cKDTree. O(log N) per query."""
+        """Alive agents within a great-circle ``radius`` (degree-equivalents, as
+        _distance_deg), from positions at the last spatial-grid rebuild.
+        Returned in agent-list order. O(log N) per query."""
         if self._kdtree is None or not self._kdtree_alive:
             return []
-        indices = self._kdtree.query_ball_point([lat, lng], radius)
+        point = _unit_sphere_xyz(np.array([lat]), np.array([lng]))[0]
+        indices = sorted(self._kdtree.query_ball_point(point, _chord_for_radius_deg(radius)))
         return [self._kdtree_alive[i] for i in indices]
 
     def get_local_state(self, lat: float, lng: float) -> dict:
@@ -904,10 +936,9 @@ class World:
         latitude). At low latitudes the result matches the previous
         euclidean approximation to within ~1%.
 
-        Note: this method is also used to post-sort cKDTree results in
-        get_local_state, which is correct — the cKDTree itself indexes
-        on raw (lat, lng) so its initial filtering is approximate, but
-        the final sort uses the corrected distance.
+        Note: get_nearby_agents uses the same metric (unit-sphere cKDTree
+        with the chord equivalent of the great-circle radius), so the
+        neighbour sets and this distance agree.
         """
         phi1 = np.radians(lat1); phi2 = np.radians(lat2)
         dphi = np.radians(lat2 - lat1)
@@ -1352,6 +1383,7 @@ class World:
             "action_dim": old.action_dim,
             "latent_dim": old.latent_dim,
             "backend": backend,
+            "seed": self.seed + _JEPA_SEED_OFFSET,
         }
         if backend == "torch":
             kwargs["device"] = device

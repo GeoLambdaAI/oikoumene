@@ -278,7 +278,7 @@ F = 5.35 * ln(CO2/280)   [Myhre et al. 1998]
 | Deep ocean coupling γ | 0.7 W/m²/°C | Gregory (2000) |
 | CO2 forcing coefficient | 5.35 W/m² | Myhre et al. (1998) |
 | Natural CO2 absorption | 50% of emissions (decadal mean) | Friedlingstein et al. (2024) |
-| Base emission rate | 42 GtCO2/yr | Friedlingstein et al. (2024) |
+| Base emission rate | 42 GtCO2/yr scale factor; 38.1 GtCO2/yr at the default 2025 state, giving +2.48 ppm/yr | Friedlingstein et al. (2024) |
 | ppm per GtCO2 | 0.128 | IPCC AR6 WG1 Annex VII (= 1/2.13 GtC × 1/3.67) |
 
 **Resource depletion** follows Hubbert-style curves (Hubbert, 1956),
@@ -466,7 +466,7 @@ altitude, and disease environment have higher survival and reproduction rates.
 
 | Module | Purpose |
 |--------|---------|
-| `agent_state.py` | Structure-of-Arrays storage + cKDTree — benchmarked at 173 tps (2000 agents) |
+| `agent_state.py` | Structure-of-Arrays storage + cKDTree — standalone benchmark (173 tps, 2000 agents); not imported by the simulation runtime |
 
 ### Tests
 
@@ -539,7 +539,7 @@ altitude, and disease environment have higher survival and reproduction rates.
 
 | Component | 2000 agents | Source |
 |-----------|-------------|--------|
-| Physics + spatial | 5.8 ms | `agent_state.py` |
+| Physics + spatial | 5.8 ms | `agent_state.py` (standalone; not imported by the runtime) |
 | JEPA encode + plan | 294 ms | `shared_world_model.py` |
 | **Total (projected)** | **~300 ms (3.3 tps)** | |
 

@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — simulation behaviour (stage 1)
+
+- **Great-circle neighbour search.** `World.get_nearby_agents` now indexes
+  unit-sphere xyz and queries the chord equivalent of the great-circle radius
+  (degree-equivalents, as `_distance_deg`). The previous raw-(lat, lng) tree
+  missed ~11–14% of neighbour pairs (east–west distances shrink with latitude)
+  and every pair across the 180° meridian. Results are returned in agent-list
+  order. Tests: `test_neighbour_search.py`.
+- **JEPA seed derived from the world seed** (`seed + 7919`, also on runtime
+  backend rebuilds) instead of the constant 0, so world-model initialisation
+  varies across world seeds.
+- README: base-emission row states the measured 38.1 GtCO2/yr and
+  2.48 ppm/yr at the default state; `agent_state.py` described as a standalone
+  benchmark, not part of the runtime.
+
 ### Added — world-model ablation
 
 - **`world_model_mode`** World config option: `"jepa"` (default, unchanged

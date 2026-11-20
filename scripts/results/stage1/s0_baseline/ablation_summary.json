@@ -1,0 +1,60 @@
+{
+  "args": {
+    "seeds": "10",
+    "seed_start": "0",
+    "ticks": "1000",
+    "agents": "25",
+    "random_scale": "1.0",
+    "modes": "['jepa']",
+    "out_dir": "scripts/results/stage1/s0_baseline"
+  },
+  "per_mode": {
+    "jepa": {
+      "agents_alive": {
+        "mean": 264.8,
+        "std": 172.46822573705828
+      },
+      "survival_rate": {
+        "mean": 0.41021513375979224,
+        "std": 0.1389195132037983
+      },
+      "mean_energy": {
+        "mean": 48.67462756065526,
+        "std": 7.314971662565941
+      },
+      "mean_distance_km": {
+        "mean": 9776.238168703418,
+        "std": 571.4833743493891
+      },
+      "food_gathered": {
+        "mean": 44998.07741422995,
+        "std": 17660.37063265331
+      },
+      "settlements": {
+        "mean": 20.1,
+        "std": 15.637916883154368
+      },
+      "mean_action_norm": {
+        "mean": 1.0232825778694554,
+        "std": 0.019839318584629704
+      },
+      "mean_intensity": {
+        "mean": 0.31404910638057393,
+        "std": 0.01898466727353074
+      },
+      "train_steps": {
+        "mean": 50.0,
+        "std": 0.0
+      },
+      "final_train_loss": {
+        "mean": 0.9348448512441797,
+        "std": 0.05096067192596916
+      },
+      "wall_clock_s": {
+        "mean": 15.338580674794503,
+        "std": 8.412965010019004
+      }
+    }
+  },
+  "paired": {}
+}

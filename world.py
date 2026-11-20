@@ -30,7 +30,16 @@ from sim_logger import SimulationLogger, LoggerConfig
 
 log = logging.getLogger(__name__)
 
-WORLD_MODEL_MODES = ("jepa", "none", "random")
+WORLD_MODEL_MODES = ("jepa", "none", "random", "const")
+# Human-readable labels for outputs. "none" removes the whole action vector,
+# which also pins behaviour intensity at its 0.1 floor, so it is not "no steering".
+WORLD_MODEL_MODE_LABELS = {
+    "jepa": "JEPA planner",
+    "none": "no action vector",
+    "random": "random action (matched scale)",
+    "const": "no steering, constant intensity",
+}
+DEFAULT_TRAIN_INTERVAL_TICKS = 20
 # Neighbour search radii are in degree-equivalents, the same unit as
 # World._distance_deg: 1 deg = 111 km on a sphere of radius 6371 km.
 _KM_PER_DEG_EQUIV = 111.0
@@ -550,14 +559,27 @@ class World:
 
         # World-model ablation (scripts/ablation_world_model.py):
         #   "jepa"   — encode + CEM planner steer agents (default behaviour)
-        #   "none"   — zero action vector; no encode, planner, experience or training
+        #   "none"   — "no action vector": all-zero action; no encode, planner,
+        #              experience or training. Intensity = clip(|a[2]|, 0.1, 1) is then
+        #              pinned at 0.1, so this removes more than steering.
         #   "random" — U(-1, 1)^8 * random_scale (the CEM action bounds), drawn from a
         #              dedicated RNG so the main world RNG sequence is unaffected
+        #   "const"  — movement components a[0], a[1] zero and a[2] = const_intensity,
+        #              so intensity is fixed and the CEM movement force is zero
+        # In every mode except "jepa" the world model is not used or trained.
         self.world_model_mode = self.config.get("world_model_mode", "jepa")
         if self.world_model_mode not in WORLD_MODEL_MODES:
             raise ValueError(f"world_model_mode must be one of {WORLD_MODEL_MODES}, "
                              f"got {self.world_model_mode!r}")
         self.random_steering_scale = float(self.config.get("random_steering_scale", 1.0))
+        self.const_intensity = float(self.config.get("const_intensity", 0.31))
+        if not 0.1 <= self.const_intensity <= 1.0:
+            raise ValueError(f"const_intensity must be in [0.1, 1.0], got {self.const_intensity}")
+        # Ticks between central world-model training steps.
+        self.train_interval_ticks = int(self.config.get("train_interval_ticks",
+                                                        DEFAULT_TRAIN_INTERVAL_TICKS))
+        if self.train_interval_ticks < 1:
+            raise ValueError(f"train_interval_ticks must be >= 1, got {self.train_interval_ticks}")
         self._steering_rng = np.random.RandomState(seed + _STEERING_RNG_OFFSET)
         import agents as _agents_module
         _agents_module._shared_world_model = self.shared_world_model
@@ -663,9 +685,13 @@ class World:
             self._kdtree = None
 
     def ablation_action(self) -> np.ndarray:
-        """Action vector replacing the planner output in "none"/"random" mode."""
+        """Action vector replacing the planner output in the "none"/"random"/"const" modes."""
         if self.world_model_mode == "random":
             return self._steering_rng.uniform(-1.0, 1.0, 8) * self.random_steering_scale
+        if self.world_model_mode == "const":
+            action = np.zeros(8)
+            action[2] = self.const_intensity  # intensity = clip(|a[2]|, 0.1, 1)
+            return action
         return np.zeros(8)
 
     def get_nearby_agents(self, lat: float, lng: float, radius: float) -> list:
@@ -1013,7 +1039,7 @@ class World:
         self.businesses = [b for b in self.businesses if b.active or b.age < 100]
 
         # Train shared world model centrally (every 20 ticks)
-        if (self.world_model_mode == "jepa" and self.tick % 20 == 0
+        if (self.world_model_mode == "jepa" and self.tick % self.train_interval_ticks == 0
                 and len(self.shared_world_model.experience_buffer) > 32):
             self.shared_world_model.train_step(
                 batch_size=min(64, len(self.shared_world_model.experience_buffer))

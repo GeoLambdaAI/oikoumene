@@ -1,4 +1,6 @@
 """Tests for the world_model_mode ablation switch (World config) and its script."""
+import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -9,9 +11,9 @@ from shared_world_model import SharedWorldModel
 from world import World
 
 sys.path.insert(0, str(Path(__file__).parent / "scripts"))
-from ablation_world_model import run_once  # noqa: E402
+from ablation_world_model import holm_adjust, min_detectable_difference, run_once  # noqa: E402
 
-MODES = ("jepa", "none", "random")
+MODES = ("jepa", "none", "random", "const")
 
 
 def _world(mode: str, seed: int = 5, agents: int = 25) -> World:
@@ -103,3 +105,81 @@ def test_jepa_rebuild_keeps_world_derived_seed() -> None:
     w.set_jepa_backend("numpy")
     after = _encoder_weights(w)
     assert all(np.array_equal(before[k], after[k]) for k in before)
+
+
+# --- Ablation v2: const mode, training interval, workers, statistics ----------
+
+def test_const_mode_action() -> None:
+    w = World(seed=2, config={"world_model_mode": "const", "const_intensity": 0.31})
+    expected = np.zeros(8)
+    expected[2] = 0.31
+    assert np.array_equal(w.ablation_action(), expected)
+    with pytest.raises(ValueError):
+        World(seed=2, config={"world_model_mode": "const", "const_intensity": 0.05})
+
+
+def test_const_mode_fixes_intensity_and_never_trains() -> None:
+    row = run_once(seed=1, mode="const", ticks=40, agents=25, const_intensity=0.4)
+    assert row["mean_intensity"] == pytest.approx(0.4)
+    assert row["mean_abs_a0"] == 0.0 and row["mean_abs_a1"] == 0.0
+    assert row["train_steps"] == 0
+
+
+def test_train_interval_default_and_override() -> None:
+    assert World(seed=1).train_interval_ticks == 20
+    default = run_once(seed=1, mode="jepa", ticks=120, agents=25)
+    fast = run_once(seed=1, mode="jepa", ticks=120, agents=25, train_interval=2)
+    assert fast["train_steps"] > default["train_steps"] > 0
+    with pytest.raises(ValueError):
+        World(seed=1, config={"train_interval_ticks": 0})
+
+
+_WORKERS_CHECK = """
+import json, sys
+sys.path.insert(0, sys.argv[1])
+from ablation_world_model import run_many
+jobs = [dict(seed=s, mode=m, ticks=25, agents=25) for s in (0, 1) for m in ("jepa", "random")]
+out = {}
+for w in (1, 2):
+    rows, losses = run_many(jobs, workers=w)
+    for r in rows:
+        r.pop("wall_clock_s")
+    out[w] = {"rows": rows, "losses": losses}
+print(json.dumps(out))
+"""
+
+
+def test_workers_do_not_change_results() -> None:
+    """workers=1 and workers=2 give identical rows and loss logs.
+
+    Runs in a fresh interpreter: test_simcore_fixes imports app, whose
+    eventlet.monkey_patch() makes multiprocessing deadlock inside pytest.
+    """
+    scripts = str(Path(__file__).parent / "scripts")
+    proc = subprocess.run([sys.executable, "-c", _WORKERS_CHECK, scripts], capture_output=True,
+                          text=True, timeout=300, cwd=Path(__file__).parent, check=False)
+    assert proc.returncode == 0, proc.stderr
+    out = json.loads(proc.stdout.strip().splitlines()[-1])  # NaN round-trips as NaN
+    one, two = out["1"], out["2"]
+    assert len(one["rows"]) == 4
+    assert json.dumps(one) == json.dumps(two)
+
+
+def test_holm_adjust_known_values() -> None:
+    adj = holm_adjust({"a": 0.01, "b": 0.04, "c": 0.03, "d": float("nan")})
+    assert adj["a"] == pytest.approx(0.03)
+    assert adj["c"] == pytest.approx(0.06)
+    assert adj["b"] == pytest.approx(0.06)  # monotone: max(0.06, 1 * 0.04)
+    assert adj["d"] != adj["d"]
+
+
+def test_min_detectable_difference_textbook() -> None:
+    """Paired t, n = 30, 80% power, alpha 0.05: d is about 0.53 SD."""
+    assert min_detectable_difference(1.0, 30) == pytest.approx(0.53, abs=0.01)
+    assert min_detectable_difference(2.0, 30) == pytest.approx(2 * min_detectable_difference(1.0, 30))
+
+
+def test_min_detectable_difference_small_n_strict_alpha() -> None:
+    """Small n at the Holm alpha must not crash (nct NaN at large noncentrality)."""
+    value = min_detectable_difference(1.0, 2, alpha=0.05 / 6)
+    assert np.isfinite(value) and value > min_detectable_difference(1.0, 30, alpha=0.05 / 6)

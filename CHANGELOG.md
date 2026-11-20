@@ -18,6 +18,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **JEPA seed derived from the world seed** (`seed + 7919`, also on runtime
   backend rebuilds) instead of the constant 0, so world-model initialisation
   varies across world seeds.
+- **Ablation v2 tooling** (no behaviour change at defaults): fourth mode
+  `"const"` (movement components zero, intensity fixed by `const_intensity`);
+  `"none"` is labelled "no action vector" in code and outputs, since a zero
+  vector also pins intensity at 0.1. Config `train_interval_ticks` (default
+  20, previously hard-coded). Ablation script: `--workers` (stdlib
+  multiprocessing, default = performance cores; results identical to one
+  process), `--pilot-seeds` (jepa pilot on separate seeds sets the random scale
+  and const intensity), `--const-intensity`, `--train-interval`, per-step
+  training-loss CSV, Holm-adjusted p and 80%-power minimum detectable
+  difference per metric.
 - README: base-emission row states the measured 38.1 GtCO2/yr and
   2.48 ppm/yr at the default state; `agent_state.py` described as a standalone
   benchmark, not part of the runtime.

@@ -53,14 +53,12 @@ def _wrap_longitude(lng: float) -> float:
 def generate_traits(parent_a: Optional[dict] = None,
                     parent_b: Optional[dict] = None,
                     mutation_rate: float = 0.15,
-                    rng: Optional[np.random.RandomState] = None) -> dict:
+                    *, rng: np.random.RandomState) -> dict:
     """Generate traits via crossover + mutation or random initialization.
 
-    ``rng`` should be the world's seeded ``RandomState`` so trait generation is
-    reproducible; it falls back to the global ``np.random`` when not supplied.
+    ``rng`` is the world's seeded ``RandomState`` (required, so trait generation
+    never touches the global ``np.random``).
     """
-    if rng is None:
-        rng = np.random
     if parent_a is None:
         return {name: np.clip(rng.beta(2, 2), 0.05, 0.95) for name in TRAIT_NAMES}
 
@@ -167,9 +165,7 @@ class SkillSet:
     ]
 
     def __init__(self, initial_skills: Optional[dict] = None,
-                 rng: Optional[np.random.RandomState] = None):
-        if rng is None:
-            rng = np.random
+                 *, rng: np.random.RandomState):
         if initial_skills:
             self.skills = {s: initial_skills.get(s, 0.01) for s in self.SKILL_TYPES}
         else:
@@ -254,15 +250,17 @@ class Agent:
                                          #  so Modern behavior is unchanged)
     LIFESPAN_NORM_YEARS = 80.0           # Normalization for obs[4] age input
     SOCIALIZE_MIN_AGE_YEARS = 8.0        # Earliest age that motivates socializing
+    # Earliest age that motivates governing. Previously read SOCIALIZE_MIN_AGE_YEARS
+    # (likely copy-paste); split out with the same value, pending a decision.
+    GOVERN_MIN_AGE_YEARS = 8.0
 
     def __init__(self, x: float, y: float,
                  parent_a: Optional['Agent'] = None,
                  parent_b: Optional['Agent'] = None,
-                 rng: Optional[np.random.RandomState] = None):
-        # Seeded RNG for full reproducibility. World passes its own RandomState so
-        # that a fixed World(seed=...) yields identical agent trajectories; falls
-        # back to the global np.random only when constructed without a world.
-        self.rng = rng if rng is not None else np.random
+                 *, rng: np.random.RandomState):
+        # Seeded RNG for full reproducibility (required). World passes its own
+        # RandomState so a fixed World(seed=...) yields identical trajectories.
+        self.rng = rng
 
         Agent._next_id += 1
         self.id = Agent._next_id
@@ -575,20 +573,12 @@ class Agent:
         )
 
         if should_plan:
-            z = self.world_model.encode(observation)
-
-            # Evaluate needs (priority-based goal selection)
-            needs = self._evaluate_needs()
-            goal = max(needs, key=needs.get)
-            self.current_goal = goal
-
-            # Generate goal observation
-            goal_obs = self._goal_to_observation(goal, observation)
-            z_goal = self.world_model.encode(goal_obs)
-
-            # Plan with CEM
-            action_seq = self.world_model.planner.plan(z, z_goal)
-            action = action_seq[0]
+            if getattr(world, "world_model_mode", "jepa") == "jepa":
+                goal, action = self._plan_with_world_model(observation)
+            else:
+                # Ablation: same goal selection, action from World.ablation_action()
+                goal = self._select_goal()
+                action = world.ablation_action()
 
             # Cache the plan
             behavior = self._decode_action(action, goal)
@@ -604,6 +594,24 @@ class Agent:
         self._apply_goal_movement(goal, action, world)
 
         return behavior
+
+    def _select_goal(self) -> str:
+        """Evaluate needs (priority-based goal selection) and set current_goal."""
+        needs = self._evaluate_needs()
+        goal = max(needs, key=needs.get)
+        self.current_goal = goal
+        return goal
+
+    def _plan_with_world_model(self, observation: np.ndarray) -> tuple[str, np.ndarray]:
+        """JEPA encode + CEM plan; returns (goal, first action of the plan)."""
+        z = self.world_model.encode(observation)
+        goal = self._select_goal()
+        # Generate goal observation
+        goal_obs = self._goal_to_observation(goal, observation)
+        z_goal = self.world_model.encode(goal_obs)
+        # Plan with CEM
+        action_seq = self.world_model.planner.plan(z, z_goal)
+        return goal, action_seq[0]
 
     def _apply_goal_movement(self, goal: str, action_vector: np.ndarray, world):
         """Apply movement forces based on the current goal."""
@@ -743,7 +751,7 @@ class Agent:
         needs["research"] = 0.2 * self.traits["curiosity"] * self.traits["intelligence"]
 
         # Leadership
-        govern_age_ticks = self._yrs_to_ticks(self.SOCIALIZE_MIN_AGE_YEARS)
+        govern_age_ticks = self._yrs_to_ticks(self.GOVERN_MIN_AGE_YEARS)
         needs["govern"] = (0.3 * self.traits["ambition"] *
                            self.traits["sociability"] if self.age > govern_age_ticks else 0)
 
@@ -824,8 +832,8 @@ class Agent:
         elif action_type == "migrate":
             outcome = self._action_migrate(world)
 
-        # Store experience for world model training
-        if hasattr(self, '_last_observation'):
+        # Store experience for world model training (not in ablation modes)
+        if hasattr(self, '_last_observation') and getattr(world, "world_model_mode", "jepa") == "jepa":
             obs = self._last_observation
             next_obs = obs.copy()
             next_obs[0] = self.energy / 100.0

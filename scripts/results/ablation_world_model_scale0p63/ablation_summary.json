@@ -1,0 +1,311 @@
+{
+  "args": {
+    "seeds": "10",
+    "seed_start": "0",
+    "ticks": "1000",
+    "agents": "25",
+    "random_scale": "0.63",
+    "modes": "['jepa', 'none', 'random']",
+    "out_dir": "scripts/results/ablation_world_model_scale0p63"
+  },
+  "per_mode": {
+    "jepa": {
+      "agents_alive": {
+        "mean": 264.8,
+        "std": 172.46822573705828
+      },
+      "survival_rate": {
+        "mean": 0.41021513375979224,
+        "std": 0.1389195132037983
+      },
+      "mean_energy": {
+        "mean": 48.67462756065526,
+        "std": 7.314971662565941
+      },
+      "mean_distance_km": {
+        "mean": 9776.238168703418,
+        "std": 571.4833743493891
+      },
+      "food_gathered": {
+        "mean": 44998.07741422995,
+        "std": 17660.37063265331
+      },
+      "settlements": {
+        "mean": 20.1,
+        "std": 15.637916883154368
+      },
+      "mean_action_norm": {
+        "mean": 1.0232825778694554,
+        "std": 0.019839318584629704
+      },
+      "mean_intensity": {
+        "mean": 0.31404910638057393,
+        "std": 0.01898466727353074
+      },
+      "train_steps": {
+        "mean": 50.0,
+        "std": 0.0
+      },
+      "final_train_loss": {
+        "mean": 0.9348448512441797,
+        "std": 0.05096067192596916
+      },
+      "wall_clock_s": {
+        "mean": 15.642652604309841,
+        "std": 8.578510734598504
+      }
+    },
+    "none": {
+      "agents_alive": {
+        "mean": 0.0,
+        "std": 0.0
+      },
+      "survival_rate": {
+        "mean": 0.0,
+        "std": 0.0
+      },
+      "mean_energy": {
+        "mean": NaN,
+        "std": NaN
+      },
+      "mean_distance_km": {
+        "mean": 3156.1608033605107,
+        "std": 48.40914337448479
+      },
+      "food_gathered": {
+        "mean": 2309.0867016370894,
+        "std": 106.59741479080911
+      },
+      "settlements": {
+        "mean": 0.0,
+        "std": 0.0
+      },
+      "mean_action_norm": {
+        "mean": 0.0,
+        "std": 0.0
+      },
+      "mean_intensity": {
+        "mean": 0.1,
+        "std": 1.0343892305196971e-17
+      },
+      "train_steps": {
+        "mean": 0.0,
+        "std": 0.0
+      },
+      "final_train_loss": {
+        "mean": NaN,
+        "std": NaN
+      },
+      "wall_clock_s": {
+        "mean": 1.1356152706895954,
+        "std": 0.042417838477631614
+      }
+    },
+    "random": {
+      "agents_alive": {
+        "mean": 300.4,
+        "std": 247.28130629799827
+      },
+      "survival_rate": {
+        "mean": 0.432657656926699,
+        "std": 0.2162152325788835
+      },
+      "mean_energy": {
+        "mean": 53.3561784262288,
+        "std": 7.85138781886291
+      },
+      "mean_distance_km": {
+        "mean": 9106.601534192221,
+        "std": 1384.1936129119497
+      },
+      "food_gathered": {
+        "mean": 44319.74888357343,
+        "std": 19449.357640311577
+      },
+      "settlements": {
+        "mean": 19.5,
+        "std": 19.6143371598997
+      },
+      "mean_action_norm": {
+        "mean": 1.0157005057247173,
+        "std": 0.0014549699394175066
+      },
+      "mean_intensity": {
+        "mean": 0.32556706041258454,
+        "std": 0.0015363351509023546
+      },
+      "train_steps": {
+        "mean": 0.0,
+        "std": 0.0
+      },
+      "final_train_loss": {
+        "mean": NaN,
+        "std": NaN
+      },
+      "wall_clock_s": {
+        "mean": 6.229185933398549,
+        "std": 4.054390205300709
+      }
+    }
+  },
+  "paired": {
+    "jepa-none": {
+      "agents_alive": {
+        "n": 10,
+        "mean_diff": 264.8,
+        "ci_low": 167.1975,
+        "ci_high": 370.10249999999996,
+        "wilcoxon_p": 0.001953125
+      },
+      "survival_rate": {
+        "n": 10,
+        "mean_diff": 0.41021513375979224,
+        "ci_low": 0.3288746977872715,
+        "ci_high": 0.490390100218265,
+        "wilcoxon_p": 0.001953125
+      },
+      "mean_energy": {
+        "n": 0,
+        "mean_diff": NaN,
+        "ci_low": NaN,
+        "ci_high": NaN,
+        "wilcoxon_p": NaN
+      },
+      "mean_distance_km": {
+        "n": 10,
+        "mean_diff": 6620.077365342908,
+        "ci_low": 6266.391153282214,
+        "ci_high": 6940.746380240367,
+        "wilcoxon_p": 0.001953125
+      },
+      "food_gathered": {
+        "n": 10,
+        "mean_diff": 42688.99071259286,
+        "ci_low": 32523.553028809492,
+        "ci_high": 53390.54642383408,
+        "wilcoxon_p": 0.001953125
+      },
+      "settlements": {
+        "n": 10,
+        "mean_diff": 20.1,
+        "ci_low": 10.9,
+        "ci_high": 29.4,
+        "wilcoxon_p": 0.001953125
+      },
+      "mean_action_norm": {
+        "n": 10,
+        "mean_diff": 1.0232825778694554,
+        "ci_low": 1.0122397667414602,
+        "ci_high": 1.0353420769031452,
+        "wilcoxon_p": 0.001953125
+      },
+      "mean_intensity": {
+        "n": 10,
+        "mean_diff": 0.21404910638057392,
+        "ci_low": 0.20285107528035534,
+        "ci_high": 0.2252781105288173,
+        "wilcoxon_p": 0.001953125
+      },
+      "train_steps": {
+        "n": 10,
+        "mean_diff": 50.0,
+        "ci_low": 50.0,
+        "ci_high": 50.0,
+        "wilcoxon_p": 0.001953125
+      },
+      "final_train_loss": {
+        "n": 0,
+        "mean_diff": NaN,
+        "ci_low": NaN,
+        "ci_high": NaN,
+        "wilcoxon_p": NaN
+      },
+      "wall_clock_s": {
+        "n": 10,
+        "mean_diff": 14.507037333620246,
+        "ci_low": 9.577819591529988,
+        "ci_high": 19.63568651692476,
+        "wilcoxon_p": 0.001953125
+      }
+    },
+    "jepa-random": {
+      "agents_alive": {
+        "n": 10,
+        "mean_diff": -35.6,
+        "ci_low": -214.0,
+        "ci_high": 120.60999999999984,
+        "wilcoxon_p": 1.0
+      },
+      "survival_rate": {
+        "n": 10,
+        "mean_diff": -0.02244252316690674,
+        "ci_low": -0.146641533401953,
+        "ci_high": 0.10979991132128446,
+        "wilcoxon_p": 0.625
+      },
+      "mean_energy": {
+        "n": 10,
+        "mean_diff": -4.68155086557354,
+        "ci_low": -9.649410605234493,
+        "ci_high": 0.18811316187037258,
+        "wilcoxon_p": 0.16015625
+      },
+      "mean_distance_km": {
+        "n": 10,
+        "mean_diff": 669.6366345111963,
+        "ci_low": 47.80769565606415,
+        "ci_high": 1425.8646754242218,
+        "wilcoxon_p": 0.130859375
+      },
+      "food_gathered": {
+        "n": 10,
+        "mean_diff": 678.3285306565136,
+        "ci_low": -12925.097308672513,
+        "ci_high": 13801.146404046347,
+        "wilcoxon_p": 0.921875
+      },
+      "settlements": {
+        "n": 10,
+        "mean_diff": 0.6,
+        "ci_low": -14.4,
+        "ci_high": 13.3,
+        "wilcoxon_p": 0.625
+      },
+      "mean_action_norm": {
+        "n": 10,
+        "mean_diff": 0.007582072144738372,
+        "ci_low": -0.0035580503826152963,
+        "ci_high": 0.019721062344467105,
+        "wilcoxon_p": 0.193359375
+      },
+      "mean_intensity": {
+        "n": 10,
+        "mean_diff": -0.011517954032010641,
+        "ci_low": -0.023004865530029044,
+        "ci_high": -4.833306338990044e-05,
+        "wilcoxon_p": 0.16015625
+      },
+      "train_steps": {
+        "n": 10,
+        "mean_diff": 50.0,
+        "ci_low": 50.0,
+        "ci_high": 50.0,
+        "wilcoxon_p": 0.001953125
+      },
+      "final_train_loss": {
+        "n": 0,
+        "mean_diff": NaN,
+        "ci_low": NaN,
+        "ci_high": NaN,
+        "wilcoxon_p": NaN
+      },
+      "wall_clock_s": {
+        "n": 10,
+        "mean_diff": 9.413466670911294,
+        "ci_low": 4.348542591833539,
+        "ci_high": 14.66586380857974,
+        "wilcoxon_p": 0.013671875
+      }
+    }
+  }
+}

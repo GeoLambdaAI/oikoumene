@@ -32,7 +32,7 @@ from agents import Agent
 
 def test_yrs_to_ticks_modern():
     print("Test 1: _yrs_to_ticks in Modern (1 month/tick)")
-    a = Agent(0, 0)
+    a = Agent(0, 0, rng=np.random.RandomState(0))
     a._era_time_scale_cache = 1.0 / 12.0  # Modern
     cases = [
         (15.0, 180),    # 15 yr * 12 = 180 ticks
@@ -52,7 +52,7 @@ def test_yrs_to_ticks_modern():
 
 def test_yrs_to_ticks_paleolithic():
     print("Test 2: _yrs_to_ticks in Paleolithic (200 yr/tick)")
-    a = Agent(0, 0)
+    a = Agent(0, 0, rng=np.random.RandomState(0))
     a._era_time_scale_cache = 200.0
     cases = [
         # All sub-200-year thresholds compress to 1 tick floor
@@ -74,7 +74,7 @@ def test_yrs_to_ticks_paleolithic():
 
 def test_yrs_to_ticks_intermediate_eras():
     print("Test 3: _yrs_to_ticks in intermediate eras")
-    a = Agent(0, 0)
+    a = Agent(0, 0, rng=np.random.RandomState(0))
     # Holocene (~50 yr/tick): 15-yr threshold should round to 0 -> floored to 1
     a._era_time_scale_cache = 50.0
     assert a._yrs_to_ticks(15.0) == 1
@@ -99,7 +99,7 @@ def test_yrs_to_ticks_intermediate_eras():
 
 def test_default_cache_safe_before_update():
     print("Test 4: agent _yrs_to_ticks safe to call before first update()")
-    a = Agent(0, 0)
+    a = Agent(0, 0, rng=np.random.RandomState(0))
     # Without ever calling update(), the cache should be Modern default
     assert a._era_time_scale_cache == 1.0 / 12.0
     assert a._yrs_to_ticks(15.0) == 180
@@ -109,7 +109,7 @@ def test_default_cache_safe_before_update():
 
 def test_modern_thresholds_match_intent():
     print("Test 5: Modern-era thresholds in real-world years")
-    a = Agent(0, 0)
+    a = Agent(0, 0, rng=np.random.RandomState(0))
     a._era_time_scale_cache = 1.0 / 12.0  # Modern
 
     repro = a._yrs_to_ticks(a.REPRODUCE_MIN_AGE_YEARS)
@@ -137,7 +137,7 @@ def test_modern_thresholds_match_intent():
 
 def test_paleo_thresholds_compressed():
     print("Test 6: Paleolithic thresholds collapse to 1 tick (generation-per-tick)")
-    a = Agent(0, 0)
+    a = Agent(0, 0, rng=np.random.RandomState(0))
     a._era_time_scale_cache = 200.0
 
     repro = a._yrs_to_ticks(a.REPRODUCE_MIN_AGE_YEARS)
@@ -157,7 +157,7 @@ def test_paleo_thresholds_compressed():
 def test_modern_behavior_drift_acceptable():
     print("Test 7: Modern-Verhalten weicht <=15% von altem Code ab (außer Repro)")
     # Vergleiche neue Schwellen gegen alte hardcoded Werte
-    a = Agent(0, 0)
+    a = Agent(0, 0, rng=np.random.RandomState(0))
     a._era_time_scale_cache = 1.0 / 12.0  # Modern
 
     # Cooldown war 80 ticks -> jetzt 72 (-10%)

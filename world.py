@@ -11,6 +11,8 @@ Manages:
 - Complete simulation tick logic
 """
 
+import logging
+
 import numpy as np
 from typing import Optional
 from agents import Agent
@@ -25,6 +27,13 @@ from god_mode import GodMode, GodModeConfig
 from scenarios import SCENARIOS, ScenarioLoader, ScenarioConfig
 from shared_world_model import SharedWorldModel
 from sim_logger import SimulationLogger, LoggerConfig
+
+log = logging.getLogger(__name__)
+
+WORLD_MODEL_MODES = ("jepa", "none", "random")
+# Offset for the ablation RNG stream; any constant works, it only has to keep
+# the "random" steering draws off the main world RNG.
+_STEERING_RNG_OFFSET = 104_729
 
 
 def _torch_available() -> bool:
@@ -329,8 +338,8 @@ class Settlement:
     _next_id = 0
 
     def __init__(self, lat: float, lng: float, founder_id: int,
-                 rng: Optional[np.random.RandomState] = None):
-        self.rng = rng if rng is not None else np.random
+                 rng: np.random.RandomState):
+        self.rng = rng
         Settlement._next_id += 1
         self.id = Settlement._next_id
         self.lat = lat
@@ -515,6 +524,18 @@ class World:
         # via set_jepa_backend(); the dashboard exposes this as a knob.
         self.shared_world_model = SharedWorldModel(obs_dim=40, action_dim=8, latent_dim=24)
         self.jepa_preset = "default"
+
+        # World-model ablation (scripts/ablation_world_model.py):
+        #   "jepa"   — encode + CEM planner steer agents (default behaviour)
+        #   "none"   — zero action vector; no encode, planner, experience or training
+        #   "random" — U(-1, 1)^8 * random_scale (the CEM action bounds), drawn from a
+        #              dedicated RNG so the main world RNG sequence is unaffected
+        self.world_model_mode = self.config.get("world_model_mode", "jepa")
+        if self.world_model_mode not in WORLD_MODEL_MODES:
+            raise ValueError(f"world_model_mode must be one of {WORLD_MODEL_MODES}, "
+                             f"got {self.world_model_mode!r}")
+        self.random_steering_scale = float(self.config.get("random_steering_scale", 1.0))
+        self._steering_rng = np.random.RandomState(seed + _STEERING_RNG_OFFSET)
         import agents as _agents_module
         _agents_module._shared_world_model = self.shared_world_model
 
@@ -577,8 +598,8 @@ class World:
                 if is_land(jlat, jlng) and not self.history.paleoclimate.get_ice_mask(year_bp, jlat, jlng):
                     validated.append((jlat, jlng))
             if len(validated) < count:
-                print(f"[spawn] Warning: placed {len(validated)}/{count} agents "
-                      f"(year_bp={year_bp:.0f}); habitable land is scarce.")
+                log.warning("[spawn] placed %d/%d agents (year_bp=%.0f); habitable land is scarce.",
+                            len(validated), count, year_bp)
             spawn_points = validated[:count]
         else:
             # Modern era: spread across habitable land
@@ -611,6 +632,12 @@ class World:
             self._kdtree = cKDTree(positions)
         else:
             self._kdtree = None
+
+    def ablation_action(self) -> np.ndarray:
+        """Action vector replacing the planner output in "none"/"random" mode."""
+        if self.world_model_mode == "random":
+            return self._steering_rng.uniform(-1.0, 1.0, 8) * self.random_steering_scale
+        return np.zeros(8)
 
     def get_nearby_agents(self, lat: float, lng: float, radius: float) -> list:
         """Fast spatial query using cKDTree. O(log N) per query."""
@@ -955,7 +982,8 @@ class World:
         self.businesses = [b for b in self.businesses if b.active or b.age < 100]
 
         # Train shared world model centrally (every 20 ticks)
-        if self.tick % 20 == 0 and len(self.shared_world_model.experience_buffer) > 32:
+        if (self.world_model_mode == "jepa" and self.tick % 20 == 0
+                and len(self.shared_world_model.experience_buffer) > 32):
             self.shared_world_model.train_step(
                 batch_size=min(64, len(self.shared_world_model.experience_buffer))
             )

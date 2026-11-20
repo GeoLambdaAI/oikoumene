@@ -6,6 +6,7 @@ Provides real-time WebSocket updates and a zoomable world map interface.
 import eventlet
 eventlet.monkey_patch()
 
+import logging
 import os
 import re
 import secrets
@@ -659,6 +660,9 @@ def main() -> None:
     # exposed on the LAN. Set BIND_HOST=0.0.0.0 explicitly only when the
     # server is fronted by an authenticated reverse proxy.
     host = os.environ.get("BIND_HOST", "127.0.0.1")
+    # Library modules only create loggers; the entry point configures output so
+    # messages that used to be print()ed stay visible.
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     create_world()
     display_host = "localhost" if host in ("127.0.0.1", "0.0.0.0") else host
     print("=" * 60)

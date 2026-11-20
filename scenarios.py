@@ -9,11 +9,15 @@ classes. The scenario only changes INITIAL CONDITIONS, not simulation logic.
 """
 
 import json
+import logging
+
 import numpy as np
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Optional
 from pathlib import Path
+
+log = logging.getLogger(__name__)
 
 DATA_DIR = Path(__file__).parent / "data"
 
@@ -82,7 +86,7 @@ class ScenarioLoader:
 
     def _configure_present_day(self, world, scenario: ScenarioConfig):
         """Initialize world from real-world data files."""
-        print("  Loading present-day data...")
+        log.info("  Loading present-day data...")
 
         # 1. Load climate -> set MacroState
         climate = self._load_json("present_day_climate.json", {
@@ -98,8 +102,8 @@ class ScenarioLoader:
         if obs is not None:
             obs_year, obs_anom, _ = obs
             world.macro.state.temperature_anomaly = obs_anom
-            print(f"    Temperature: anchored to HadCRUT5 {obs_year} "
-                  f"= {obs_anom:+.2f}°C vs pre-industrial")
+            log.info("    Temperature: anchored to HadCRUT5 %s = %+.2f°C vs pre-industrial",
+                     obs_year, obs_anom)
         # Recompute derived macro fields (radiative_forcing, social_tension,
         # food/welfare indices) from the fully-seeded state so they are correct
         # from tick 0 rather than the class defaults until the first macro step.
@@ -122,14 +126,14 @@ class ScenarioLoader:
         from empirical_ingest import load_present_day_conflicts
         conflicts = load_present_day_conflicts()
         if conflicts:
-            print(f"    Conflicts: {len(conflicts)} zones anchored from UCDP-GED")
+            log.info("    Conflicts: %d zones anchored from UCDP-GED", len(conflicts))
         else:
             conflicts = self._load_json("present_day_conflicts.json", [])
         self._init_conflicts(world, conflicts)
 
-        print(f"  Present-day init: {len(world.agents)} agents, "
-              f"{len(world.geopolitics.nations)} nations, "
-              f"{len(world.geopolitics.active_conflicts)} conflicts")
+        log.info("  Present-day init: %d agents, %d nations, %d conflicts",
+                 len(world.agents), len(world.geopolitics.nations),
+                 len(world.geopolitics.active_conflicts))
 
     def _init_macro(self, macro, climate: dict):
         """Set MacroState from real climate data."""
@@ -360,7 +364,7 @@ class ScenarioLoader:
         if path.exists():
             with open(path) as f:
                 return json.load(f)
-        print(f"    WARNING: {filename} not found, using defaults")
+        log.warning("    %s not found, using defaults", filename)
         return default
 
     def _load_npy(self, filename: str) -> Optional[np.ndarray]:
@@ -368,5 +372,5 @@ class ScenarioLoader:
         path = DATA_DIR / filename
         if path.exists():
             return np.load(path)
-        print(f"    WARNING: {filename} not found")
+        log.warning("    %s not found", filename)
         return None

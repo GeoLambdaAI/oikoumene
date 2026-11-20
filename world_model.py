@@ -142,12 +142,12 @@ def adaln_backward(dy, cache, W_scale, W_shift):
 # This is the Jarque-Bera moment formulation.
 # ============================================================================
 
-def sigreg_forward(Z, n_projections=16, eps=1e-6, rng=None):
+def sigreg_forward(Z, n_projections=16, eps=1e-6, *, rng: np.random.RandomState):
     """
     Z: (batch, latent_dim)
+    rng: seeded RandomState for the projection directions (required).
     Returns (loss, cache) where loss is differentiable w.r.t. Z.
     """
-    rng = rng or np.random
     B, D = Z.shape
     U = rng.randn(D, n_projections)
     U /= np.linalg.norm(U, axis=0, keepdims=True) + 1e-10  # unit columns
@@ -477,6 +477,31 @@ class CEMPlanner:
         return mu
 
 
+def heldout_probe_r2(Z: np.ndarray, Y: np.ndarray, test_fraction: float = 0.2) -> dict:
+    """Linear-probe R^2 on held-out samples.
+
+    Deterministic temporal split with no RNG: the last ``test_fraction`` of the
+    (chronologically ordered) samples is the test set. A temporal split also
+    avoids leakage between adjacent, autocorrelated experience samples. The
+    returned R^2 is not clipped and can be negative (worse than predicting the
+    test mean).
+    """
+    n_test = int(round(len(Z) * test_fraction))
+    n_train = len(Z) - n_test
+    if n_test < 2 or n_train < 2:
+        return {"physical_r2_heldout": 0.0, "n_train": n_train, "n_test": n_test}
+    Z_aug = np.hstack([Z, np.ones((len(Z), 1))])
+    try:
+        W_probe, *_ = np.linalg.lstsq(Z_aug[:n_train], Y[:n_train], rcond=None)
+    except np.linalg.LinAlgError:
+        return {"physical_r2_heldout": 0.0, "n_train": n_train, "n_test": n_test}
+    Y_test = Y[n_train:]
+    ss_res = np.sum((Y_test - Z_aug[n_train:] @ W_probe) ** 2)
+    ss_tot = np.sum((Y_test - Y_test.mean(axis=0)) ** 2) + 1e-8
+    return {"physical_r2_heldout": round(float(1.0 - ss_res / ss_tot), 4),
+            "n_train": n_train, "n_test": n_test}
+
+
 # ============================================================================
 # Full JEPA World Model
 # ============================================================================
@@ -686,7 +711,10 @@ class JEPAWorldModel:
         except np.linalg.LinAlgError:
             r2 = 0.0
 
-        return {"physical_r2": round(max(0.0, r2), 4), "n_samples": len(Z)}
+        # "physical_r2" is in-sample (fit and scored on the same samples).
+        result = {"physical_r2": round(max(0.0, r2), 4), "n_samples": len(Z)}
+        result.update(heldout_probe_r2(Z, Y))
+        return result
 
     def get_world_understanding(self) -> dict:
         base = {

@@ -758,7 +758,7 @@ class HistoricalSimulation:
     Integrated into World.step() via the bridge.
     """
 
-    def __init__(self, start_year_bp: float = 70000, rng=None):
+    def __init__(self, start_year_bp: float = 70000, *, rng: np.random.RandomState):
         self.year_bp = start_year_bp
         self.paleoclimate = PaleoclimateModel()
         self.geographic = GeographicAdvantage()
@@ -768,7 +768,8 @@ class HistoricalSimulation:
         # RandomState in keeps discovery timing (which drives
         # industrialization_level -> macro CO2/temperature) reproducible for a
         # fixed seed, instead of leaking to the unseeded global np.random.
-        self.rng = rng if rng is not None else np.random.RandomState()
+        # Required: an unseeded fallback made runs irreproducible.
+        self.rng = rng
 
         # Initialize with era-appropriate starting techs
         era = get_era(start_year_bp)

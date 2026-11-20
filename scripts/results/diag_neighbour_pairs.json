@@ -1,0 +1,107 @@
+{
+  "args": {
+    "seeds": "10",
+    "ticks": "1000",
+    "sample_every": "50",
+    "agents": "25",
+    "out": "/Users/gtom/Documents/Python/GIT/oikoumene/scripts/results/diag_neighbour_pairs.json"
+  },
+  "snapshots": 198,
+  "pairs": {
+    "3.0": {
+      "both": {
+        "n": 8654,
+        "high_lat": 171,
+        "dateline": 0
+      },
+      "raw_only": {
+        "n": 4,
+        "high_lat": 0,
+        "dateline": 0
+      },
+      "sphere_only": {
+        "n": 1225,
+        "high_lat": 94,
+        "dateline": 0
+      }
+    },
+    "5.0": {
+      "both": {
+        "n": 22276,
+        "high_lat": 514,
+        "dateline": 0
+      },
+      "raw_only": {
+        "n": 9,
+        "high_lat": 0,
+        "dateline": 0
+      },
+      "sphere_only": {
+        "n": 2814,
+        "high_lat": 252,
+        "dateline": 0
+      }
+    },
+    "10.0": {
+      "both": {
+        "n": 69099,
+        "high_lat": 1989,
+        "dateline": 0
+      },
+      "raw_only": {
+        "n": 21,
+        "high_lat": 0,
+        "dateline": 0
+      },
+      "sphere_only": {
+        "n": 7754,
+        "high_lat": 684,
+        "dateline": 0
+      }
+    }
+  },
+  "synthetic": {
+    "60N_4deg_lng_apart": {
+      "3.0": {
+        "raw": false,
+        "sphere": true
+      },
+      "5.0": {
+        "raw": true,
+        "sphere": true
+      },
+      "10.0": {
+        "raw": true,
+        "sphere": true
+      }
+    },
+    "60N_8deg_lng_apart": {
+      "3.0": {
+        "raw": false,
+        "sphere": false
+      },
+      "5.0": {
+        "raw": false,
+        "sphere": true
+      },
+      "10.0": {
+        "raw": true,
+        "sphere": true
+      }
+    },
+    "equator_dateline_2deg": {
+      "3.0": {
+        "raw": false,
+        "sphere": true
+      },
+      "5.0": {
+        "raw": false,
+        "sphere": true
+      },
+      "10.0": {
+        "raw": false,
+        "sphere": true
+      }
+    }
+  }
+}

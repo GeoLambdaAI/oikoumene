@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — world-model ablation
+
+- **`world_model_mode`** World config option: `"jepa"` (default, unchanged
+  behaviour), `"none"` (zero action vector; no encode, planner, experience
+  storage or training) and `"random"` (U(-1, 1)^8 × `random_steering_scale`,
+  drawn from a dedicated RNG so the main world RNG sequence is unaffected).
+- **`scripts/ablation_world_model.py`** — headless historical-scenario ablation,
+  N seeds × 3 modes; per-run CSV (alive, survival rate, energy, distance, food,
+  settlements, action norm, intensity, train steps, final loss, wall clock) plus
+  per-mode mean/std and paired jepa−none / jepa−random differences with a paired
+  bootstrap 95% CI and Wilcoxon signed-rank p-value. `--random-scale` matches
+  the random action magnitude to the planner's.
+- **`scripts/diag_neighbour_pairs.py`** — counts neighbour pairs returned by the
+  raw-degree cKDTree pre-filter vs. a great-circle (unit-sphere) query, as input
+  for a pending decision; `world.py` is unchanged.
+- `world_model.heldout_probe_r2` and a `physical_r2_heldout` key in the numpy
+  JEPA linear probe (deterministic temporal 80/20 split, no RNG). The existing
+  in-sample `physical_r2` is unchanged.
+- `MacroModel.euler_fallback_count`, plus a `logging` warning when `solve_ivp`
+  fails and the Euler fallback is used.
+- Tests: `test_correctness_fixes.py`, `test_world_model_ablation.py`.
+
+### Changed — correctness pass (no change in simulation behaviour)
+
+- `macro.py`: named `POLLUTION_DECAY_RATE` (0.02/yr; comment corrected — 50 yr
+  e-folding, ~34.7 yr half-life). `FOSSIL_HALF_DEPLETION` /
+  `MINERAL_HALF_DEPLETION` renamed to `*_DEPLETION_TIME_CONSTANT` (they are
+  time constants, not half-lives). Emission comments corrected: the default
+  state emits ~38.1 GtCO2/yr (42 is the scale factor) and gives ~2.48 ppm/yr.
+  The 280 ppm forcing floor vs. 150 ppm state clamp is documented, not changed.
+  The temperature × pollution food factor is shared (`_crop_yield_factor`),
+  with both water terms kept explicit; bit-identical to before. Removed unused
+  `dataclasses.field` import.
+- `rng` is now a required argument of `Agent`, `SkillSet`, `generate_traits`,
+  `Settlement`, `HistoricalSimulation` and `sigreg_forward` (no global or
+  unseeded `np.random` fallback).
+- `Agent.GOVERN_MIN_AGE_YEARS = 8.0` split out from `SOCIALIZE_MIN_AGE_YEARS`
+  (same value).
+- `world.py` / `scenarios.py` use `logging` instead of `print()`; `app.main()`
+  configures logging at INFO so the messages stay visible.
+
 ### Added — empirical ingestion wired (v0.4, first increment)
 
 - **`empirical_ingest.py`** — runtime-safe (pure numpy + stdlib, no GDAL)

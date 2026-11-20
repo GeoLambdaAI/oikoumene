@@ -12,9 +12,13 @@ experience: rising temperatures, depleting resources, accumulating pollution.
 Agent actions feed back into this model via the bridge.
 """
 
-from dataclasses import dataclass, field
+import logging
+from dataclasses import dataclass
+
 import numpy as np
 from scipy.integrate import solve_ivp
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -54,6 +58,19 @@ class MacroState:
     food_production_index: float = 1.0      # Relative to 2025
     human_welfare_index: float = 0.65       # Composite (0-1)
     radiative_forcing: float = 2.7          # W/m^2, computed from CO2
+
+
+def _crop_yield_factor(temp: float, pollution: float) -> float:
+    """Temperature x pollution part of the food index, shared by both food formulas.
+
+    Schlenker & Roberts 2009: crop yields decline above optimal temperature.
+    The water term is applied separately at each call site because the two
+    formulas use different ones: _compute_derived uses max(0.4, 1 - 0.5*fw),
+    the population carrying capacity uses (1 - 0.3*fw).
+    """
+    temp_effect = max(0.3, 1.0 - 0.12 * max(0, temp - 1.5) ** 1.5)
+    pollution_effect = max(0.5, 1.0 - 0.3 * pollution)
+    return temp_effect * pollution_effect
 
 
 # State vector indices for ODE system
@@ -119,8 +136,17 @@ class MacroModel:
     ABSORPTION_TEMP_SENSITIVITY = 0.06  # Reduction per degC warming (weakening sink)
 
     # --- Resource depletion ---
-    FOSSIL_HALF_DEPLETION = 80.0    # Years at current rate, World3 calibration
-    MINERAL_HALF_DEPLETION = 120.0  # Years at current rate
+    # Time constants tau (years) of first-order extraction dR/dt = -(demand/tau) * R,
+    # World3 calibration. These are e-folding times, not half-lives: at constant
+    # baseline demand the remaining stock halves after tau * ln 2 years
+    # (~55 yr fossil, ~83 yr minerals).
+    FOSSIL_DEPLETION_TIME_CONSTANT = 80.0    # Years at baseline demand
+    MINERAL_DEPLETION_TIME_CONSTANT = 120.0  # Years at baseline demand
+
+    # --- Pollution ---
+    # First-order decay of persistent pollution, per year. e-folding time
+    # 1/0.02 = 50 yr; half-life ln 2 / 0.02 = ~34.7 yr.
+    POLLUTION_DECAY_RATE = 0.02
 
     # --- Socioeconomic ---
     BASE_EMISSION_RATE = 42.0       # GtCO2/yr baseline 2025, source: GCP 2024
@@ -141,6 +167,7 @@ class MacroModel:
         self.state = MacroState()
         self.dt_years = self.config.get("dt_years", 1.0 / 12.0)  # ~1 month per step
         self._last_feedback: dict = {}
+        self.euler_fallback_count = 0  # solve_ivp failures handled by the Euler fallback
 
     def _state_to_vector(self) -> np.ndarray:
         """Pack MacroState into ODE state vector."""
@@ -193,16 +220,22 @@ class MacroModel:
         s = self.state
 
         # Radiative forcing from CO2: F = 5.35 * ln(CO2/CO2_0), Myhre et al. 1998
+        # NOTE (known inconsistency, kept deliberately): CO2 is floored at 280 ppm
+        # here and in _ode_system, while _vector_to_state clamps the state at
+        # 150 ppm. Below 280 ppm (glacial / sub-pre-industrial states) forcing is
+        # therefore held at 0 W/m^2 instead of going negative.
         s.radiative_forcing = self.FORCING_COEFF * np.log(
             max(s.co2_ppm, 280.0) / self.CO2_PREINDUSTRIAL
         )
 
         # Food production index: affected by temperature, pollution, water
         # Schlenker & Roberts 2009: crop yields decline above optimal temperature
-        temp_effect = max(0.3, 1.0 - 0.12 * max(0, s.temperature_anomaly - 1.5) ** 1.5)
-        pollution_effect = max(0.5, 1.0 - 0.3 * s.persistent_pollution)
+        # Water term of the reported index; differs from the carrying-capacity
+        # water term in _ode_system (kept as-is, see _crop_yield_factor).
         water_effect = max(0.4, 1.0 - 0.5 * s.freshwater_stress)
-        s.food_production_index = temp_effect * pollution_effect * water_effect
+        s.food_production_index = (
+            _crop_yield_factor(s.temperature_anomaly, s.persistent_pollution) * water_effect
+        )
 
         # Human welfare index: composite HDI-like measure
         # Inspired by Earth4All wellbeing indicator
@@ -245,6 +278,9 @@ class MacroModel:
         dy = np.zeros(_N_STATES)
 
         # Unpack state
+        # NOTE: 280 ppm floor here vs. 150 ppm state clamp in _vector_to_state;
+        # see the note in _compute_derived. Below 280 ppm forcing is 0 and ocean
+        # acidification sees 280 ppm.
         co2 = max(280.0, y[_IDX["co2"]])
         temp = y[_IDX["temp"]]
         deep_temp = y[_IDX["deep_temp"]]
@@ -273,7 +309,9 @@ class MacroModel:
         # ================================================================
 
         # Emissions: base rate scaled by fossil use, population, GDP
-        # Baseline: ~42 GtCO2/yr in 2025, source: Global Carbon Project 2024
+        # BASE_EMISSION_RATE = 42 GtCO2/yr (GCP 2024) is the scale factor, not the
+        # t=0 rate: at the default MacroState (renewable_fraction = 0.15) the
+        # fossil_share factor (0.85**0.6 = 0.907) gives ~38.1 GtCO2/yr.
         # Note: (1-renewable)^0.6 because many sectors can't easily switch
         # (cement, steel, aviation, agriculture), so emissions decline slower
         # than renewable fraction suggests. Source: IEA Net Zero 2021
@@ -316,8 +354,10 @@ class MacroModel:
         # FIX (v0.2): Previous code divided by 3.67 (GtCO2 -> GtC) and then
         # multiplied by 0.128, but 0.128 is already ppm/GtCO2 — the conversion
         # was applied twice, underestimating the CO2 rise by a factor of 3.67.
-        # Verified against current Mauna Loa observations (~2.5-3 ppm/yr at
-        # 42 GtCO2/yr * ~50% airborne fraction).
+        # Check against Mauna Loa (~2.5-3 ppm/yr): at the default state emissions
+        # are ~38.1 GtCO2/yr and absorption efficiency is 0.491 (0.50 weakened
+        # by 0.3 deg C above the 1 deg C threshold), giving
+        # 38.1 * 0.509 * 0.128 = ~2.48 ppm/yr.
         net_emissions_gtco2 = fossil_emissions - natural_absorption
         dy[_IDX["co2"]] = net_emissions_gtco2 * self.PPM_PER_GTCO2
 
@@ -352,7 +392,7 @@ class MacroModel:
 
         # Fossil fuel depletion: smooth decline curve
         # Source: Hubbert 1956, calibrated per World3 (Meadows 2004)
-        # At baseline rate, ~80 years to deplete half of remaining
+        # Time constant 80 yr at baseline demand (half of remaining after ~55 yr)
         demand_factor = (
             (pop / 8.1) *
             gdp *
@@ -361,7 +401,7 @@ class MacroModel:
             (1.0 / tech)                  # Technology increases efficiency
         )
         extraction_rate = (
-            (1.0 / self.FOSSIL_HALF_DEPLETION) *
+            (1.0 / self.FOSSIL_DEPLETION_TIME_CONSTANT) *
             demand_factor *
             fossil                         # Extraction proportional to remaining stock
         )
@@ -374,7 +414,7 @@ class MacroModel:
             (1.0 - 0.3 * min(1.0, tech / 3.0))  # Recycling improves with tech
         )
         mineral_extraction = (
-            (1.0 / self.MINERAL_HALF_DEPLETION) *
+            (1.0 / self.MINERAL_DEPLETION_TIME_CONSTANT) *
             mineral_demand *
             minerals                       # Proportional to remaining
         )
@@ -400,7 +440,7 @@ class MacroModel:
             (1.0 - renewable * 0.5) *     # Renewables are cleaner
             (1.0 / tech)                  # Tech reduces pollution per GDP
         )
-        pollution_decay = 0.02 * pollution  # ~50 year half-life for persistent pollutants
+        pollution_decay = self.POLLUTION_DECAY_RATE * pollution
         dy[_IDX["pollution"]] = pollution_generation - pollution_decay
 
         # Ocean acidification: directly tied to CO2 absorption
@@ -416,8 +456,9 @@ class MacroModel:
 
         # Population growth: logistic with carrying capacity affected by food
         # Source: UN WPP 2024, Vollset et al. 2020 (Lancet)
-        food_index = max(0.3, 1.0 - 0.12 * max(0, temp - 1.5) ** 1.5) * \
-                     max(0.5, 1.0 - 0.3 * pollution)
+        # Water term for carrying capacity; differs from the water term of the
+        # reported food_production_index (kept as-is, see _crop_yield_factor).
+        food_index = _crop_yield_factor(temp, pollution)
         carrying_capacity = 12.0 * food_index * (1.0 - freshwater * 0.3)
         # Demographic transition: growth slows with wealth and education (tech proxy)
         demographic_transition = max(0.1, 1.0 - 0.3 * tech / 3.0 - 0.2 * gdp / 2.0)
@@ -512,6 +553,9 @@ class MacroModel:
             self._vector_to_state(sol.y[:, -1])
         else:
             # Fallback: Euler step
+            self.euler_fallback_count += 1
+            log.warning("solve_ivp failed at year %.3f (%s); using Euler fallback (count=%d)",
+                        self.state.year, sol.message, self.euler_fallback_count)
             dy = self._ode_system(0, y0, agent_feedback)
             self._vector_to_state(y0 + dy * self.dt_years)
 

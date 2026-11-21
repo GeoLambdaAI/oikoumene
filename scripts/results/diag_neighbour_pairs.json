@@ -4,7 +4,7 @@
     "ticks": "1000",
     "sample_every": "50",
     "agents": "25",
-    "out": "/Users/gtom/Documents/Python/GIT/oikoumene/scripts/results/diag_neighbour_pairs.json"
+    "out": "scripts/results/diag_neighbour_pairs.json"
   },
   "snapshots": 198,
   "pairs": {

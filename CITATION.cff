@@ -4,7 +4,7 @@ type: software
 title: "Oikoumene: Autonomous Agent Civilization Simulator"
 abstract: >-
   A physics-based, AI-driven simulation of human civilization on Planet Earth,
-  integrating JEPA world models for agent cognition (LeCun 2022; Maes et al. 2026),
+  integrating JEPA world models for agent planning (LeCun 2022; Maes et al. 2026),
   a 14-state macro ODE for system dynamics (Club of Rome / DICE / Earth4All),
   emergent geopolitics (International Futures), and 70,000 years of paleoclimate
   data on real Earth geography.
@@ -13,8 +13,8 @@ authors:
     given-names: Gerrit
     name-suffix: Dr.
     affiliation: GeoLambda GmbH
-version: 0.3.1
-date-released: "2026-07-06"
+version: 0.4.0
+date-released: "2026-11-21"
 license: AGPL-3.0-or-later
 repository-code: "https://github.com/GeoLambdaAI/oikoumene"
 url: "https://www.geolambda.ai"

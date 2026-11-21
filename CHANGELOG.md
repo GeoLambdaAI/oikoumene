@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-21
+
+### Changed — README claims aligned with the ablation
+
+- README §1 gains an ablation paragraph (configs (i), (ii), (iii) and the post
+  hoc (iii-b)); the introduction, §1 heading, image alt text and caption, the
+  `agents.py` file-table row and the `test_world_model.py` test-table row no
+  longer claim goal-directed latent planning, "cognition", or a probe R² beyond
+  what the code and tests show.
+- **Correction:** the R² = 0.98 linear-probe figure quoted for v0.2.0 (below
+  and in the README) was an in-sample fit on a synthetic toy problem that is
+  not in the repository.
+
 ### Changed — simulation behaviour (stage 1)
 
 - **Great-circle neighbour search.** `World.get_nearby_agents` now indexes
@@ -813,7 +826,8 @@ release, not a refactor.
 - **`SECURITY.md`** added — threat model, in-scope vs. out-of-scope mitigations, operator deployment checklist, and a vulnerability-disclosure process via GitHub's private vulnerability reporting.
 - Verified that `LLMModule.api_key` is not leaked through `get_status()`, `get_full_state()`, snapshot dumps, or `metadata.json`.
 
-[Unreleased]: https://github.com/GeoLambdaAI/oikoumene/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/GeoLambdaAI/oikoumene/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/GeoLambdaAI/oikoumene/releases/tag/v0.4.0
 [0.2.1]: https://github.com/GeoLambdaAI/oikoumene/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/GeoLambdaAI/oikoumene/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/GeoLambdaAI/oikoumene/releases/tag/v0.1.0

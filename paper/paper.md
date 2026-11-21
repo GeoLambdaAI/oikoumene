@@ -1,5 +1,5 @@
 ---
-title: "Oikoumene: A Multi-Scale Agent-Based Simulator of Human Civilization with JEPA Cognition and Coupled Earth-System Dynamics"
+title: "Oikoumene: A Multi-Scale Agent-Based Simulator of Human Civilization with a JEPA World Model and Coupled Earth-System Dynamics"
 tags:
   - Python
   - agent-based modelling
@@ -24,9 +24,10 @@ bibliography: paper.bib
 
 `Oikoumene` is an open-source simulator that couples autonomous agents to
 a coupled Earth-system, macroeconomic, and geopolitical model on real Earth
-geography. Each agent perceives, plans, and acts through a Joint Embedding
-Predictive Architecture (JEPA) world model [@lecun2022path; @maes2026leworldmodel],
-while a 14-state ordinary-differential-equation (ODE) layer governs global
+geography. Each agent's movement bias and action intensity come from a
+cross-entropy-method planner over a shared Joint Embedding Predictive
+Architecture (JEPA) world model [@lecun2022path; @maes2026leworldmodel],
+conditioned on its current goal, while a 14-state ordinary-differential-equation (ODE) layer governs global
 climate, resources, and socioeconomics. Nation-states emerge organically when
 agent settlements coalesce, with bilateral trade and conflict probability
 following established gravity-model and International Futures specifications.
@@ -52,8 +53,8 @@ populations as aggregate stocks; agent-based models such as Sugarscape and
 Schelling-style frameworks deliver emergent behaviour but lack physical
 grounding; large language model agents now match human conversational
 fidelity but have no persistent world model. `Oikoumene` bridges these
-traditions: a single shared JEPA world model supplies vector cognition to
-hundreds of agents simultaneously, while a calibrated macro ODE supplies
+traditions: a single shared JEPA world model and latent-space planner set
+movement and intensity for hundreds of agents simultaneously, while a calibrated macro ODE supplies
 the physical and economic constraints those agents inhabit. The result is
 a research instrument suitable for studying emergent civilisation
 dynamics, climate-policy counterfactuals, and the coupling between
@@ -70,8 +71,11 @@ nation-formation, trade, and conflict from primitive agent interactions
 
 # Features
 
-- **JEPA cognition** with adaptive layer normalisation, SIGReg
+- **JEPA world model and planner** with adaptive layer normalisation, SIGReg
   regularisation [@maes2026leworldmodel], and a Cross-Entropy Method planner.
+  In an ablation against matched random and constant-intensity actions, the
+  planner showed no pre-specified outcome benefit attributable to latent-space
+  steering (`scripts/ablation_world_model.py`).
 - **14-state macro ODE** spanning two-layer energy balance, Hubbert resource
   curves [@hubbert1956nuclear], DICE damages [@nordhaus2017revisiting], and
   Earth4All social tension [@dixsondecleve2022earth].

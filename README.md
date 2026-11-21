@@ -11,7 +11,7 @@
 **A physics-based, AI-driven simulation of human civilization on Planet Earth —
 from the Out-of-Africa migration 70,000 years ago to climate futures beyond 2100.**
 
-Each autonomous agent uses a JEPA world model (LeCun 2022; Maes et al. 2026) to perceive its environment and plan goal-directed movement in latent space. Goal selection follows a Maslow-style needs hierarchy modulated by personality traits — a dual-process architecture (Kahneman 2011) combining symbolic utility-AI for what-to-do with neural latent planning for how-to-move. Settlements, nations, trade networks, conflicts, and trait evolution are fully emergent on our planet's surface with real climate data.
+Each agent's movement bias and action intensity come from a cross-entropy-method planner over a shared JEPA world model (LeCun 2022; Maes et al. 2026), conditioned on its current goal. Goal selection follows a Maslow-style needs hierarchy modulated by personality traits — a dual-process architecture (Kahneman 2011) combining symbolic utility-AI for what-to-do with a latent-space planner for movement and intensity (see the ablation in §1). Settlements, nations, trade networks, conflicts, and trait evolution are fully emergent on our planet's surface with real climate data.
 
 
 [![License: AGPL v3+](https://img.shields.io/badge/License-AGPL%20v3+-blue.svg)](LICENSE)
@@ -19,23 +19,33 @@ Each autonomous agent uses a JEPA world model (LeCun 2022; Maes et al. 2026) to 
 [![Tests](https://github.com/GeoLambdaAI/oikoumene/actions/workflows/test.yml/badge.svg)](https://github.com/GeoLambdaAI/oikoumene/actions/workflows/test.yml)
 [![DOI](https://img.shields.io/badge/DOI-pending-lightgrey.svg)](https://www.geolambda.ai)
 
-> **Status:** v0.3.1 — a **security & correctness patch**: closed an LLM
+> **Status:** v0.4.0 — see the `## [0.4.0]` section of
+> [CHANGELOG.md](CHANGELOG.md). v0.3.1 was a **security & correctness patch**: closed an LLM
 > API-key exfiltration path and DOM XSS on the web surface, added SSRF/base-URL
 > validation and input hardening, made the background tick loop reset-safe, and
 > fixed a batch of simulation-core bugs (Present-Day nations no longer
 > self-delete, seeded-RNG reproducibility, logger lifecycle, paleo→macro climate
 > continuity, drought/regen composition). See the `## [0.3.1]` section of
 > [CHANGELOG.md](CHANGELOG.md). v0.3.0 added the optional **PyTorch JEPA
-> backend** (paper-aligned toggles, NumPy/Torch parity tests). Substantial
-> **unreleased work toward v0.4** remains in the `[Unreleased]` section:
+> backend** (paper-aligned toggles, NumPy/Torch parity tests).
+> **v0.4.0** adds:
 > - the **empirical-input download pipeline** (CHELSA, SoilGrids, ETOPO, HYDE,
->   UCDP-GED, HadCRUT5) and **Sobol sensitivity analysis** — the downloaders and
->   their tests are implemented, but the runtime **ingestion is not yet wired**
->   (the simulation still runs on the synthetic `data/earth_*.npy` grids);
+>   UCDP-GED, HadCRUT5) and **Sobol sensitivity analysis**. Runtime ingestion is
+>   wired for the Present-Day scenario only: its initial conflicts are anchored
+>   to UCDP-GED events and its starting temperature to the latest HadCRUT5
+>   anomaly, each falling back to the shipped JSON when the optional dataset is
+>   absent. CHELSA, SoilGrids, ETOPO and HYDE are downloaded and tested but not
+>   yet read at runtime; the Earth grids still come from the synthetic
+>   `data/earth_*.npy` files;
 > - **anthropogenic CO₂ coupled to the civilization's industrialisation** (with a
 >   continuous paleo→Industrial climate handoff), **seeded-RNG reproducibility**,
->   engine hardening (agent/settlement pruning, conservative economy), and
->   performance vectorisation that removed the periodic per-tick stalls.
+>   engine hardening (agent/settlement pruning, conservative economy),
+>   performance vectorisation that removed the periodic per-tick stalls,
+>   great-circle neighbour search and world-seed-derived JEPA initialisation;
+> - a **world-model ablation** (`scripts/ablation_world_model.py`): against
+>   matched random and constant-intensity controls, the JEPA planner showed no
+>   pre-specified outcome benefit attributable to latent-space steering (see the
+>   ablation paragraph in §1).
 >
 > v0.2.x were calibration releases that fixed scientific-constant, coupling, and
 > timing bugs. See [CHANGELOG.md](CHANGELOG.md) for the full history. The
@@ -51,10 +61,10 @@ Each autonomous agent uses a JEPA world model (LeCun 2022; Maes et al. 2026) to 
 
 <p align="center">
   <a href="static/oikoumene.jpg">
-    <img src="static/oikoumene.jpg" alt="Oikoumene — global view showing autonomous agents distributed across all continents, with live macro state, JEPA agent cognition, and emergent geopolitics side panels" width="820">
+    <img src="static/oikoumene.jpg" alt="Oikoumene — global view showing autonomous agents distributed across all continents, with live macro state, JEPA planner state, and emergent geopolitics side panels" width="820">
   </a>
   <br>
-  <sub><em>Oikoumene running the Present-Day scenario — autonomous agents on a real population-density-weighted distribution, with live macro state (CO₂, temperature, population), JEPA agent cognition, and emergent nations.</em></sub>
+  <sub><em>Oikoumene running the Present-Day scenario — autonomous agents on a real population-density-weighted distribution, with live macro state (CO₂, temperature, population), JEPA planner state, and emergent nations.</em></sub>
 </p>
 
 ---
@@ -184,7 +194,7 @@ Initializes from **real-world data** (World Bank API, NOAA, NASA GISS):
 The simulation integrates research from seven distinct scientific domains.
 Every equation in the codebase cites its source.
 
-### 1. JEPA World Model — Agent Cognition
+### 1. JEPA World Model — Agent Planning
 
 Each agent perceives the world through a **Joint Embedding Predictive Architecture**
 (JEPA), as proposed by Yann LeCun.
@@ -245,6 +255,8 @@ gracefully and the NumPy backend keeps running.
   → extract movement bias and intensity; cached between re-plans.
 - **System 2** (LLM, optional, social actions only): trade negotiation,
   governance speech, social dialogue.
+
+**Ablation.** `scripts/ablation_world_model.py` replaces the planner's action with controls in the historical scenario (25 initial agents; results in `scripts/results/ablation_v2/`). With the default training schedule (one update every 20 ticks; 1000 ticks, 30 seeds) the planner did not outperform random actions of matched norm or a constant action intensity without steering: survival was lower than under either control (Holm-adjusted p ≈ 0.03) and no other outcome differed. Over 3000 ticks (10 seeds) the planner was not distinguishable from matched random actions after Holm correction and outperformed only the constant, unsteered control, so movement variation matters but learned direction was not shown to. With 10× more frequent training the planner chiefly learned a higher action intensity. Outcomes depend strongly and non-monotonically on intensity (a constant intensity of 0.42 left more agents alive than the planner, 0.48 fewer), so we do not attribute outcome differences to latent-space steering. A comparison with per-component matched controls, added after seeing these results, favoured the trained planner on population and settlements; it has not been confirmed in a pre-specified run.
 
 ### 2. System Dynamics — Macro Model
 
@@ -435,7 +447,7 @@ altitude, and disease environment have higher survival and reproduction rates.
 
 | Module | Lines | Purpose |
 |--------|-------|---------|
-| `agents.py` | 1,208 | Autonomous agents: JEPA cognition, physics, traits, skills, memory, social actions |
+| `agents.py` | 1,208 | Autonomous agents: JEPA planning, physics, traits, skills, memory, social actions |
 | `world.py` | 1,189 | World engine: tick loop, resources, businesses, settlements, scenario dispatch, era-aware UI summaries, runtime JEPA backend swap |
 | `world_model.py` | 701 | JEPA implementation (NumPy, hand-written backprop): encoder, predictor (AdaLN), SIGReg, CEM planner, deterministic batch sampling |
 | `world_model_torch.py` | 534 | Optional PyTorch JEPA backend (autograd): same architecture, CUDA-ready, Epps–Pulley SIGReg toggle, NumPy weight bridge |
@@ -473,7 +485,7 @@ altitude, and disease environment have higher survival and reproduction rates.
 | Test | Validates | Count |
 |------|-----------|-------|
 | `test_macro.py` | BAU 2025–2100 vs. IPCC AR6 SSP2-4.5/SSP3-7.0 envelope; carbon-cycle vs. Mauna Loa decadal mean; ECS-consistency unit test | 9 + 2 |
-| `test_world_model.py` | JEPA training: prediction-loss reduction, learned action-conditioning, anti-collapse, linear probe R², CEM planner output validity | 5 |
+| `test_world_model.py` | JEPA training: prediction-loss reduction, learned action-conditioning, anti-collapse, linear-probe R² is well-formed (in [0, 1]), CEM planner output validity | 5 |
 | `test_world_model_gradcheck.py` | Backward implementations (linear, GELU, RMSNorm, AdaLN, SIGReg) verified against central finite differences (measured relative error <1e-8) | 5 |
 | `test_shared_world_model.py` | Single vs. batch equivalence (max diff 1e-15), per-agent vs. plan_batch identity, edge cases | 6 |
 | `test_world_model_torch.py` | PyTorch backend (opt-in): single/batch parity, NumPy↔Torch weight cross-check (<1e-4), Epps–Pulley toggle, device handling (skips if torch absent) | 9 (+1 CUDA-gated) |
@@ -561,9 +573,11 @@ that affected scientific correctness without breaking the runtime:
    replaces this with hand-written analytic backpropagation in pure NumPy,
    verified against central finite differences to <1e-8 relative error
    (`test_world_model_gradcheck.py`).
-   On a synthetic toy problem with hidden physical parameters, prediction
-   loss now decreases 103× and a linear probe recovers the hidden physics
-   with R² = 0.98.
+   On a synthetic toy problem with hidden physical parameters (not included
+   in the repository), prediction loss decreased 103× and an in-sample
+   linear probe reached R² = 0.98; `probe_physical_understanding` now also
+   reports a held-out R² (temporal 80/20 split), not yet re-measured on that
+   problem.
 2. **Carbon-cycle unit conversion was off by a factor of 3.67** because
    the v0.1 code applied a GtCO₂→GtC division and then multiplied by a
    ppm/GtCO₂ constant, double-converting. The model produced ~0.8 ppm/yr

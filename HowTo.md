@@ -162,10 +162,10 @@ Persist these in a `.envrc` (direnv) or your shell profile — never commit them
 
 <p align="center">
   <a href="static/oikoumene.jpg">
-    <img src="static/oikoumene.jpg" alt="Oikoumene web UI — global map with agents, top bar statistics, side panel with agent cognition and nation feed" width="800">
+    <img src="static/oikoumene.jpg" alt="Oikoumene web UI — global map with agents, top bar statistics, side panel with JEPA planner state and nation feed" width="800">
   </a>
   <br>
-  <sub><em>The Present-Day scenario in motion. Top bar = live macro statistics; map = agents on real Earth; right panel = live JEPA cognition, press feed, and discussions.</em></sub>
+  <sub><em>The Present-Day scenario in motion. Top bar = live macro statistics; map = agents on real Earth; right panel = live JEPA planner state, press feed, and discussions.</em></sub>
 </p>
 
 | Element | What it does |

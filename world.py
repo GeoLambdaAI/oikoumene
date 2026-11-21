@@ -571,7 +571,11 @@ class World:
         if self.world_model_mode not in WORLD_MODEL_MODES:
             raise ValueError(f"world_model_mode must be one of {WORLD_MODEL_MODES}, "
                              f"got {self.world_model_mode!r}")
-        self.random_steering_scale = float(self.config.get("random_steering_scale", 1.0))
+        # A scalar, or one scale per action component (per-component matched control).
+        scale = np.asarray(self.config.get("random_steering_scale", 1.0), dtype=float)
+        if scale.shape not in ((), (8,)) or np.any(scale < 0):
+            raise ValueError(f"random_steering_scale must be a scalar or 8 values >= 0, got {scale}")
+        self.random_steering_scale = scale if scale.shape else float(scale)
         self.const_intensity = float(self.config.get("const_intensity", 0.31))
         if not 0.1 <= self.const_intensity <= 1.0:
             raise ValueError(f"const_intensity must be in [0.1, 1.0], got {self.const_intensity}")
@@ -1038,7 +1042,7 @@ class World:
         # Remove dead businesses
         self.businesses = [b for b in self.businesses if b.active or b.age < 100]
 
-        # Train shared world model centrally (every 20 ticks)
+        # Train shared world model centrally (every train_interval_ticks, default 20)
         if (self.world_model_mode == "jepa" and self.tick % self.train_interval_ticks == 0
                 and len(self.shared_world_model.experience_buffer) > 32):
             self.shared_world_model.train_step(

@@ -23,6 +23,7 @@ ENV/
 htmlcov/
 coverage.xml
 .tox/
+scripts/results/**/*.log
 
 # ---- Simulation run output ----
 # CSV/JSON written by sim_logger.py at runtime — not source.

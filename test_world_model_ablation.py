@@ -11,7 +11,9 @@ from shared_world_model import SharedWorldModel
 from world import World
 
 sys.path.insert(0, str(Path(__file__).parent / "scripts"))
-from ablation_world_model import holm_adjust, min_detectable_difference, run_once  # noqa: E402
+from ablation_world_model import (holm_adjust, load_reused, match_per_component,  # noqa: E402
+                                  min_detectable_difference, parse_args, run_once,
+                                  uniform_scale_for_intensity, write_raw)
 
 MODES = ("jepa", "none", "random", "const")
 
@@ -183,3 +185,54 @@ def test_min_detectable_difference_small_n_strict_alpha() -> None:
     """Small n at the Holm alpha must not crash (nct NaN at large noncentrality)."""
     value = min_detectable_difference(1.0, 2, alpha=0.05 / 6)
     assert np.isfinite(value) and value > min_detectable_difference(1.0, 30, alpha=0.05 / 6)
+
+
+# --- (iii-b), post hoc: per-component matched controls, reused jepa rows ------
+
+def test_per_component_random_scale() -> None:
+    scales = [0.5, 0.25, 0.9, 0, 0, 0, 0, 0]
+    w = World(seed=2, config={"world_model_mode": "random", "random_steering_scale": scales})
+    draws = np.array([w.ablation_action() for _ in range(2000)])
+    assert np.all(np.abs(draws) <= np.array(scales))
+    assert np.all(draws[:, 3:] == 0) and np.abs(draws[:, 2]).max() > 0.85
+    with pytest.raises(ValueError):
+        World(seed=2, config={"random_steering_scale": [0.5, 0.5]})
+    with pytest.raises(ValueError):
+        World(seed=2, config={"random_steering_scale": -0.1})
+
+
+def test_vector_scale_equals_scalar_scale() -> None:
+    a = World(seed=3, config={"world_model_mode": "random", "random_steering_scale": 0.6})
+    b = World(seed=3, config={"world_model_mode": "random", "random_steering_scale": [0.6] * 8})
+    assert isinstance(a.random_steering_scale, float)
+    for _ in range(50):
+        assert np.array_equal(a.ablation_action(), b.ablation_action())
+
+
+def test_uniform_scale_for_intensity_monte_carlo() -> None:
+    s = uniform_scale_for_intensity(0.478)
+    u = np.random.RandomState(0).uniform(-s, s, 400_000)
+    assert np.clip(np.abs(u), 0.1, 1.0).mean() == pytest.approx(0.478, abs=2e-3)
+    with pytest.raises(ValueError):
+        uniform_scale_for_intensity(0.6)  # would need s > 1
+
+
+def test_match_per_component() -> None:
+    rows = [{"seed": i, "mean_abs_a0": 0.2 + 0.02 * i, "mean_abs_a1": 0.3, "mean_intensity": 0.4} for i in range(3)]
+    m = match_per_component(rows)
+    assert m["random_scale"][:2] == pytest.approx([0.44, 0.6])
+    assert m["random_scale"][2] == pytest.approx(uniform_scale_for_intensity(0.4))
+    assert m["random_scale"][3:] == [0.0] * 5 and m["const_intensity"] == pytest.approx(0.4)
+
+
+def test_load_reused_round_trip(tmp_path: Path) -> None:
+    losses: list = []
+    rows = [run_once(seed=s, mode="jepa", ticks=25, agents=25, train_interval=2, loss_log=losses) for s in (0, 1)]
+    write_raw(rows, losses, tmp_path)
+    args = parse_args(["--seeds", "2", "--ticks", "25", "--train-interval", "2", "--workers", "1"])
+    got, got_losses = load_reused(tmp_path, args)
+    assert [r["seed"] for r in got] == [0, 1] and len(got_losses) == len(losses)
+    for k in ("food_gathered", "mean_abs_a0", "mean_intensity", "final_train_loss"):
+        assert [r[k] for r in got] == [r[k] for r in rows], k
+    with pytest.raises(ValueError):
+        load_reused(tmp_path, parse_args(["--seeds", "3", "--ticks", "25", "--train-interval", "2"]))

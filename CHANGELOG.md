@@ -28,6 +28,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and const intensity), `--const-intensity`, `--train-interval`, per-step
   training-loss CSV, Holm-adjusted p and 80%-power minimum detectable
   difference per metric.
+- **Per-component matched controls (post hoc design (iii-b)).**
+  `random_steering_scale` also accepts 8 per-component scales (a scalar
+  behaves exactly as before). Ablation script `--reuse-jepa DIR` reads jepa
+  rows and loss steps from an earlier output and matches the controls per
+  component to them, instead of rerunning jepa. Results of configs (i), (ii),
+  (iii) and (iii-b) are in `scripts/results/ablation_v2/`.
 - README: base-emission row states the measured 38.1 GtCO2/yr and
   2.48 ppm/yr at the default state; `agent_state.py` described as a standalone
   benchmark, not part of the runtime.

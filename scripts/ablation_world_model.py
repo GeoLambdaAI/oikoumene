@@ -14,6 +14,13 @@ With --pilot-seeds K > 0, a jepa pilot on K separate seeds (from
 --pilot-seed-start) sets random_scale = mean jepa action norm / E||U(-1,1)^8||
 and const_intensity = mean jepa intensity, before any evaluation run.
 
+With --reuse-jepa DIR (post hoc design (iii-b)), jepa rows and loss steps are
+read from DIR instead of being run, and the controls are matched per component
+to those rows: const_intensity = mean jepa intensity; random draws
+a[k] ~ U(-s_k, s_k) with s_0 = 2 mean|a[0]|, s_1 = 2 mean|a[1]| (same mean
+absolute movement components), s_2 such that E clip(|a[2]|, 0.1, 1) equals the
+jepa mean intensity, and s_3..s_7 = 0 (training-only components, unused here).
+
 Per run (ablation_runs.csv): agents alive, survival rate, mean energy, mean
 distance per agent, food gathered, settlements, mean action L2 norm, mean
 |a[0]|, |a[1]|, |a[2]|, mean intensity, train steps, final and last-10-step
@@ -234,6 +241,48 @@ def pilot(args: argparse.Namespace) -> dict:
     return result
 
 
+def uniform_scale_for_intensity(target: float) -> float:
+    """s with E clip(|U(-s, s)|, 0.1, 1) = target, i.e. (0.005 + s^2 / 2) / s = target for 0.1 <= s <= 1."""
+    s = target + float(np.sqrt(target**2 - 0.01)) if target >= 0.1 else float("nan")
+    if not 0.1 <= s <= 1.0:
+        raise ValueError(f"no uniform scale in [0.1, 1] gives mean intensity {target}")
+    return s
+
+
+def match_per_component(jepa_rows: list[dict]) -> dict:
+    """Per-component random scales and const intensity matched to jepa evaluation rows."""
+    m0, m1, intensity = (float(np.mean([r[k] for r in jepa_rows]))
+                         for k in ("mean_abs_a0", "mean_abs_a1", "mean_intensity"))
+    scales = [2.0 * m0, 2.0 * m1, uniform_scale_for_intensity(intensity)] + [0.0] * 5
+    log.info("per-component match: jepa |a0| %.4f |a1| %.4f intensity %.4f -> scales %s",
+             m0, m1, intensity, np.round(scales, 4).tolist())
+    return {"source": "jepa evaluation rows (reused)", "seeds": sorted(r["seed"] for r in jepa_rows),
+            "jepa_mean_abs_a0": m0, "jepa_mean_abs_a1": m1, "jepa_mean_intensity": intensity,
+            "random_scale": scales, "const_intensity": intensity}
+
+
+def _parse_cell(value: str) -> object:
+    try:
+        return float(value)
+    except ValueError:
+        return json.loads(value) if value.startswith("[") else value
+
+
+def load_reused(run_dir: Path, args: argparse.Namespace) -> tuple[list[dict], list[dict]]:
+    """jepa rows and loss steps from an earlier run; checks they match this configuration."""
+    with open(run_dir / "ablation_runs.csv", newline="") as f:
+        rows = [{k: _parse_cell(v) for k, v in r.items()} for r in csv.DictReader(f) if r["mode"] == "jepa"]
+    with open(run_dir / "ablation_train_loss.csv", newline="") as f:
+        losses = [{k: _parse_cell(v) for k, v in r.items()} for r in csv.DictReader(f) if r["mode"] == "jepa"]
+    for r in rows + losses:
+        r["seed"] = int(r["seed"])
+    wanted = set(range(args.seed_start, args.seed_start + args.seeds))
+    config = {(r["ticks"], r["initial_agents"], r["train_interval"]) for r in rows}
+    if {r["seed"] for r in rows} != wanted or config != {(args.ticks, args.agents, args.train_interval)}:
+        raise ValueError(f"reused jepa runs in {run_dir} do not match seeds/ticks/agents/train interval")
+    return rows, losses
+
+
 def min_detectable_difference(sd: float, n: int, alpha: float = ALPHA, power: float = POWER) -> float:
     """Smallest |mean paired difference| a two-sided paired t-test detects with ``power``."""
     if n < 2 or not np.isfinite(sd) or sd == 0:
@@ -349,8 +398,8 @@ def write_summary(summary: dict, args: argparse.Namespace, pilot_result: dict | 
     (args.out_dir / "ablation_summary.json").write_text(
         json.dumps({"args": meta, "note": args.note, "pilot": pilot_result, **summary}, indent=2))
     header = (f"Config: {args.agents} agents, {args.ticks} ticks, train interval {args.train_interval}, "
-              f"seeds {args.seed_start}..{args.seed_start + args.seeds - 1}, random_scale {args.random_scale:.4f}, "
-              f"const_intensity {args.const_intensity:.4f}" + (f"\n\nNote: {args.note}" if args.note else "")
+              f"seeds {args.seed_start}..{args.seed_start + args.seeds - 1}, "
+              f"random_scale {np.round(args.random_scale, 4).tolist()}, const_intensity {args.const_intensity:.4f}" + (f"\n\nNote: {args.note}" if args.note else "")
               + (f"\n\nPilot: {json.dumps(pilot_result)}" if pilot_result else ""))
     md = summary_markdown(summary, header)
     (args.out_dir / "ablation_summary.md").write_text(md)
@@ -375,20 +424,36 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     ap.add_argument("--pilot-seed-start", type=int, default=1000, help="first pilot seed (kept apart from evaluation)")
     ap.add_argument("--modes", nargs="+", default=list(WORLD_MODEL_MODES), choices=WORLD_MODEL_MODES)
     ap.add_argument("--workers", type=int, default=None, help="parallel processes (default: performance cores)")
+    ap.add_argument("--reuse-jepa", type=Path, default=None,
+                    help="read jepa rows from this earlier output dir and match controls per component to them")
     ap.add_argument("--note", default="", help="free text recorded in the summary")
     ap.add_argument("--out-dir", type=Path, default=ROOT / "scripts" / "results" / "ablation_world_model")
     args = ap.parse_args(argv)
     if args.workers is None:
         args.workers = performance_cores()
+    if args.reuse_jepa is not None and args.pilot_seeds > 0:
+        ap.error("--reuse-jepa and --pilot-seeds are alternative matching designs")
     return args
+
+
+def prepare_controls(args: argparse.Namespace) -> tuple[dict | None, list[dict], list[dict]]:
+    """Set args.random_scale / const_intensity from a pilot or reused jepa rows; returns (matching, rows, losses)."""
+    if args.reuse_jepa is not None:
+        rows, losses = load_reused(args.reuse_jepa, args)
+        args.modes = [m for m in args.modes if m != "jepa"]
+        matching = match_per_component(rows)
+    elif args.pilot_seeds > 0:
+        rows, losses, matching = [], [], pilot(args)
+    else:
+        return None, [], []
+    args.random_scale, args.const_intensity = matching["random_scale"], matching["const_intensity"]
+    return matching, rows, losses
 
 
 def main() -> None:
     args = parse_args()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    pilot_result = pilot(args) if args.pilot_seeds > 0 else None
-    if pilot_result:
-        args.random_scale, args.const_intensity = pilot_result["random_scale"], pilot_result["const_intensity"]
+    pilot_result, reused_rows, reused_losses = prepare_controls(args)
     jobs = [dict(seed=s, mode=m, ticks=args.ticks, agents=args.agents, random_scale=args.random_scale,
                  const_intensity=args.const_intensity, train_interval=args.train_interval)
             for s in range(args.seed_start, args.seed_start + args.seeds) for m in args.modes]
@@ -398,6 +463,7 @@ def main() -> None:
         log.info("seed=%d mode=%-6s alive=%d food=%.1f dist=%.0fkm norm=%.3f train=%d %.1fs", r["seed"], r["mode"],
                  r["agents_alive"], r["food_gathered"], r["mean_distance_km"], r["mean_action_norm"],
                  r["train_steps"], r["wall_clock_s"])
+    rows, losses = reused_rows + rows, reused_losses + losses
     write_raw(rows, losses, args.out_dir)
     write_summary(summarize(rows), args, pilot_result)
 

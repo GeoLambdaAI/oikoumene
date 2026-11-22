@@ -255,7 +255,7 @@ def get_god_log():
 @app.route("/api/jepa/status")
 def get_jepa_status():
     if world is None:
-        from oikoumene.core.world import _torch_available
+        from oikoumene.core.world_views import _torch_available
         return jsonify({"backend": "numpy", "preset": "default",
                         "torch_available": _torch_available()})
     return jsonify(world.get_jepa_status())

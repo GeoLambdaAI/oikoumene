@@ -187,7 +187,7 @@ def test_heldout_probe_detects_overfitting() -> None:
 
 # --- B12: no print() in simulation modules ------------------------------------
 
-@pytest.mark.parametrize("module", ["core/world.py", "core/scenarios.py", "macro/macro.py"])
+@pytest.mark.parametrize("module", ["core/world.py", "core/scenarios.py", "macro/macro.py", "worldmodel/layers.py"])
 def test_no_print_calls_in_simulation_modules(module: str) -> None:
     tree = ast.parse((PKG / module).read_text())
     prints = [n.lineno for n in ast.walk(tree)

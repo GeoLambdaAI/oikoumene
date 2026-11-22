@@ -54,10 +54,10 @@ HYDE ships as a single 5.3 GB ZIP; the script caches it on disk.
 Install: pip install -e ".[data]"
 
 Run once:
-    python generate_empirical_inputs.py --all
-    python generate_empirical_inputs.py --chelsa --vars tas pr
-    python generate_empirical_inputs.py --hyde --years 1500 1700 1900 2000
-    python generate_empirical_inputs.py --soilgrids
+    python -m oikoumene.datagen.generate_empirical_inputs --all
+    python -m oikoumene.datagen.generate_empirical_inputs --chelsa --vars tas pr
+    python -m oikoumene.datagen.generate_empirical_inputs --hyde --years 1500 1700 1900 2000
+    python -m oikoumene.datagen.generate_empirical_inputs --soilgrids
 """
 from __future__ import annotations
 
@@ -499,7 +499,7 @@ def download_hadcrut5() -> Path:
 def load_hadcrut5_global_annual() -> Optional[np.ndarray]:
     """
     Return the saved HadCRUT5 global annual anomaly array, or None if the
-    user hasn't run `generate_empirical_inputs.py --hadcrut5` yet.
+    user hasn't run `python -m oikoumene.datagen.generate_empirical_inputs --hadcrut5` yet.
 
     Returned array is a structured numpy array with fields
     (year, anom, sigma_ens, sigma_cov, sigma_total). Anomalies are in

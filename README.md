@@ -135,6 +135,7 @@ Each agent's movement bias and action intensity come from a cross-entropy-method
 ```bash
 cd oikoumene-main
 pip install numpy flask flask-socketio eventlet scipy networkx shapely requests
+pip install -e .   # makes the oikoumene package (src/oikoumene/) importable
 ```
 
 ### Installation (macOS, recommended via Conda)
@@ -143,14 +144,15 @@ pip install numpy flask flask-socketio eventlet scipy networkx shapely requests
 conda create -n oikoumene python=3.11 -y
 conda activate oikoumene
 pip install -r requirements.txt
+pip install -e .
 ```
 
 ### Generate Earth Data (one-time)
 
 ```bash
-python generate_landmask.py        # ~10s — rasterizes Natural Earth coastlines
-python generate_earth_data.py      # ~1s  — climate zones, resources, biomes
-python generate_present_day_data.py # ~15s — World Bank API, NOAA, NASA (needs internet)
+python -m oikoumene.datagen.generate_landmask         # ~10s — rasterizes Natural Earth coastlines
+python -m oikoumene.datagen.generate_earth_data       # ~1s  — climate zones, resources, biomes
+python -m oikoumene.datagen.generate_present_day_data # ~15s — World Bank API, NOAA, NASA (needs internet)
 ```
 
 ### Run
@@ -443,42 +445,44 @@ altitude, and disease environment have higher survival and reproduction rates.
 
 ## Module Reference
 
+Module paths are relative to `src/oikoumene/`; tests live in `tests/`.
+
 ### Core Simulation
 
 | Module | Lines | Purpose |
 |--------|-------|---------|
-| `agents.py` | 1,208 | Autonomous agents: JEPA planning, physics, traits, skills, memory, social actions |
-| `world.py` | 1,189 | World engine: tick loop, resources, businesses, settlements, scenario dispatch, era-aware UI summaries, runtime JEPA backend swap |
-| `world_model.py` | 701 | JEPA implementation (NumPy, hand-written backprop): encoder, predictor (AdaLN), SIGReg, CEM planner, deterministic batch sampling |
-| `world_model_torch.py` | 534 | Optional PyTorch JEPA backend (autograd): same architecture, CUDA-ready, Epps–Pulley SIGReg toggle, NumPy weight bridge |
-| `shared_world_model.py` | 263 | Single shared JEPA for all agents with batch encode/plan; selects NumPy or PyTorch backend |
-| `macro.py` | 512 | 14-state ODE: climate, resources, pollution, socioeconomics |
-| `geopolitics.py` | 705 | Emergent nations, alliances, trade (gravity model), conflict (IFs) |
-| `bridge.py` | 456 | Bidirectional coupling: agents <-> macro <-> geopolitics; per-cell regen baselines |
-| `history.py` | 849 | 70,000-year timeline: paleoclimate, migration, Diamond, Dawkins |
+| `agents/agents.py` | 1,208 | Autonomous agents: JEPA planning, physics, traits, skills, memory, social actions |
+| `core/world.py` | 1,189 | World engine: tick loop, resources, businesses, settlements, scenario dispatch, era-aware UI summaries, runtime JEPA backend swap |
+| `worldmodel/world_model.py` | 701 | JEPA implementation (NumPy, hand-written backprop): encoder, predictor (AdaLN), SIGReg, CEM planner, deterministic batch sampling |
+| `worldmodel/world_model_torch.py` | 534 | Optional PyTorch JEPA backend (autograd): same architecture, CUDA-ready, Epps–Pulley SIGReg toggle, NumPy weight bridge |
+| `worldmodel/shared_world_model.py` | 263 | Single shared JEPA for all agents with batch encode/plan; selects NumPy or PyTorch backend |
+| `macro/macro.py` | 512 | 14-state ODE: climate, resources, pollution, socioeconomics |
+| `society/geopolitics.py` | 705 | Emergent nations, alliances, trade (gravity model), conflict (IFs) |
+| `core/bridge.py` | 456 | Bidirectional coupling: agents <-> macro <-> geopolitics; per-cell regen baselines |
+| `core/history.py` | 849 | 70,000-year timeline: paleoclimate, migration, Diamond, Dawkins |
 
 ### Extensions
 
 | Module | Lines | Purpose |
 |--------|-------|---------|
-| `llm_module.py` | 713 | LLM social cognition (Ollama/OpenAI): trade negotiation, governance speech, social dialogue |
-| `god_mode.py` | 450 | Interventional experiments: whisper, commandment, drought, plague, climate nudge |
-| `scenarios.py` | 334 | Scenario A (historical) and B (present-day) configuration |
-| `earth.py` | 478 | Real geography: Natural Earth land mask, Whittaker biomes, resource lookup |
+| `llm/llm_module.py` | 713 | LLM social cognition (Ollama/OpenAI): trade negotiation, governance speech, social dialogue |
+| `core/god_mode.py` | 450 | Interventional experiments: whisper, commandment, drought, plague, climate nudge |
+| `core/scenarios.py` | 334 | Scenario A (historical) and B (present-day) configuration |
+| `core/earth.py` | 478 | Real geography: Natural Earth land mask, Whittaker biomes, resource lookup |
 
 ### Data Generation (run once)
 
 | Script | Purpose |
 |--------|---------|
-| `generate_landmask.py` | Rasterize Natural Earth 110m polygons to 0.25° land mask |
-| `generate_earth_data.py` | Compute 9 Earth system grids at 0.5° (temp, precip, biome, fertility, minerals, freshwater, fossil) |
-| `generate_present_day_data.py` | Fetch World Bank API + NOAA + NASA data for Scenario B |
+| `datagen/generate_landmask.py` | Rasterize Natural Earth 110m polygons to 0.25° land mask |
+| `datagen/generate_earth_data.py` | Compute 9 Earth system grids at 0.5° (temp, precip, biome, fertility, minerals, freshwater, fossil) |
+| `datagen/generate_present_day_data.py` | Fetch World Bank API + NOAA + NASA data for Scenario B |
 
 ### Performance Building Blocks
 
 | Module | Purpose |
 |--------|---------|
-| `agent_state.py` | Structure-of-Arrays storage + cKDTree — standalone benchmark (173 tps, 2000 agents); not imported by the simulation runtime |
+| `agents/agent_state.py` | Structure-of-Arrays storage + cKDTree — standalone benchmark (173 tps, 2000 agents); not imported by the simulation runtime |
 
 ### Tests
 

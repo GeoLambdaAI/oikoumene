@@ -52,6 +52,7 @@ source .venv/bin/activate              # Windows: .venv\Scripts\activate
 
 # Runtime dependencies
 pip install -r requirements.txt
+pip install -e .   # makes the oikoumene package (src/oikoumene/) importable
 ```
 
 Two **optional** dependency groups, installed via the `pyproject.toml`:
@@ -69,6 +70,7 @@ You can install both: `pip install -e ".[viz,dev]"`.
 conda create -n oikoumene python=3.11 -y
 conda activate oikoumene
 pip install -r requirements.txt
+pip install -e .
 ```
 ---
 
@@ -77,9 +79,9 @@ pip install -r requirements.txt
 A **one-time** step. Run all three scripts from the repository root:
 
 ```bash
-python generate_landmask.py          # ~10s  — rasterises Natural Earth coastlines to 0.25°
-python generate_earth_data.py        # ~1s   — climate / biomes / resources at 0.5°
-python generate_present_day_data.py  # ~15s  — fetches World Bank / NOAA / NASA (needs internet)
+python -m oikoumene.datagen.generate_landmask          # ~10s  — rasterises Natural Earth coastlines to 0.25°
+python -m oikoumene.datagen.generate_earth_data        # ~1s   — climate / biomes / resources at 0.5°
+python -m oikoumene.datagen.generate_present_day_data  # ~15s  — fetches World Bank / NOAA / NASA (needs internet)
 ```
 
 Output appears in [`data/`](data/) — `landmask.npy`, `earth_*.npy`, `ne_110m_*.geojson`,
@@ -282,9 +284,9 @@ df[["tick", "macro_co2_ppm", "macro_temperature", "population"]].plot(x="tick")
 ## 9. Run the test suites
 
 ```bash
-python test_macro.py          # 9/9 — IPCC AR6 calibration on BAU 2025→2100
-python test_agent_state.py    # 4/4 PASS + benchmarks across 500–2000 agents
-python test_llm_module.py     # 9/9 — fallback mode, JSON parsing, rate limiting
+python tests/test_macro.py          # 9/9 — IPCC AR6 calibration on BAU 2025→2100
+python tests/test_agent_state.py    # 4/4 PASS + benchmarks across 500–2000 agents
+python tests/test_llm_module.py     # 9/9 — fallback mode, JSON parsing, rate limiting
 ```
 
 Or use `pytest`:

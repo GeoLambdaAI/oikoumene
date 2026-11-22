@@ -19,7 +19,7 @@ when redistributing or citing simulation outputs.
 - **Files:** `data/empirical/ne_10m_rivers_lake_centerlines.geojson` —
   finer global river network than the shipped 110 m vector. Same data
   publisher and same licence as above. Fetched by
-  `generate_empirical_inputs.py --ne-rivers` from the Natural Earth CDN
+  `python -m oikoumene.datagen.generate_empirical_inputs --ne-rivers` from the Natural Earth CDN
   (`https://naciscdn.org/naturalearth/10m/physical/`, verified 2026-06-21).
 - **Licence:** Public domain (same as Natural Earth 110 m).
 - **Attribution suggested:** "Made with Natural Earth."
@@ -30,7 +30,7 @@ when redistributing or citing simulation outputs.
   ocean values are negative). Replaces the synthetic `earth_elevation.npy`
   produced by `generate_earth_data.py` (currently derived from
   tectonic-plate-boundary heuristics). Fetched by
-  `generate_empirical_inputs.py --etopo`.
+  `python -m oikoumene.datagen.generate_empirical_inputs --etopo`.
 - **Source:** NOAA National Centers for Environmental Information; THREDDS
   file server at
   `https://www.ngdc.noaa.gov/thredds/fileServer/global/ETOPO2022/`. Single
@@ -85,7 +85,7 @@ the synthetic layers:
   Acts as a **second independent observational anchor** next to NASA GISTEMP
   for the macro temperature track; consumed by the
   `test_macro_hadcrut5_consistency` validation test. Fetched by
-  `generate_empirical_inputs.py --hadcrut5`.
+  `python -m oikoumene.datagen.generate_empirical_inputs --hadcrut5`.
 - **Source:** Met Office Hadley Centre + Climatic Research Unit (UEA).
   Download index:
   [metoffice.gov.uk/hadobs/hadcrut5/data/HadCRUT.5.1.0.0/download.html](https://www.metoffice.gov.uk/hadobs/hadcrut5/data/HadCRUT.5.1.0.0/download.html);
@@ -110,7 +110,7 @@ the synthetic layers:
   drops any trailing *provisional* in-progress calendar year (its coverage
   uncertainty is sharply inflated vs complete years), so the saved series ends
   at the last complete annual mean. If you ship a stale copy, re-fetch with
-  `python generate_empirical_inputs.py --hadcrut5` to refresh it.
+  `python -m oikoumene.datagen.generate_empirical_inputs --hadcrut5` to refresh it.
 
 ### IPCC AR6 WG1 calibration values
 - **Use:** Climate sensitivity (3.0 °C/2×CO₂), feedback parameter (1.1 W/m²/°C),
@@ -125,7 +125,7 @@ the synthetic layers:
   temperature / precipitation rasters that replace the heuristic
   `earth_temperature.npy` / `earth_precipitation.npy` produced by
   `generate_earth_data.py`. Fetched and resampled by
-  `generate_empirical_inputs.py --chelsa`.
+  `python -m oikoumene.datagen.generate_empirical_inputs --chelsa`.
 - **Source:** [chelsa-climate.org](https://chelsa-climate.org/) — archived at
   [EnviDat](https://doi.org/10.16904/envidat.228); data bucket at
   `https://os.unil.cloud.switch.ch/chelsa02/chelsa/global/climatologies/`.
@@ -147,7 +147,7 @@ the synthetic layers:
   (0–5 cm) fertility index derived from soil organic carbon, nitrogen and
   clay fraction. Replaces the heuristic `earth_fertility.npy` produced by
   `generate_earth_data.py`. Fetched by
-  `generate_empirical_inputs.py --soilgrids`.
+  `python -m oikoumene.datagen.generate_empirical_inputs --soilgrids`.
 - **Source:** [ISRIC SoilGrids](https://soilgrids.org/) — documented at
   [docs.isric.org/globaldata/soilgrids](https://docs.isric.org/globaldata/soilgrids/);
   WebDAV at `https://files.isric.org/soilgrids/latest/data/`.
@@ -211,7 +211,7 @@ the synthetic layers:
   population and land-use rasters for selected years, used as the *primary*
   historical validation track for emergent demographics and as a spatial
   initial condition for Scenario A. Fetched by
-  `generate_empirical_inputs.py --hyde --years …`.
+  `python -m oikoumene.datagen.generate_empirical_inputs --hyde --years …`.
 - **Source:** [HYDE 3.2 on DANS](https://doi.org/10.17026/DANS-25G-GEZ3)
   (the authoritative archive; the PBL homepage links here). Files served
   via the standard Dataverse API at
@@ -246,7 +246,7 @@ the synthetic layers:
   full UCDP-GED 1989-present event series. **Empirical validation anchor**
   for the macro/geopolitics emergent conflict layer; replaces the role of
   the illustrative `present_day_conflicts.json`. Fetched by
-  `generate_empirical_inputs.py --ucdp-ged`.
+  `python -m oikoumene.datagen.generate_empirical_inputs --ucdp-ged`.
 - **Source:** Uppsala Conflict Data Program (Department of Peace and
   Conflict Research, Uppsala University). Downloads index:
   [ucdp.uu.se/downloads](https://ucdp.uu.se/downloads/); current ZIP at

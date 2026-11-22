@@ -3,14 +3,14 @@
 **Version:** 0.3.0
 **Date of validation run:** 2026-05-06
 **Seed:** deterministic (no stochastic terms in BAU macro path)
-**Reproduction:** `python test_macro.py`
+**Reproduction:** `python tests/test_macro.py`
 
 ---
 
 ## 1. Scope of validation
 
 This document records the calibration of the 14-state macro ODE
-([`macro.py`](../macro.py)) against published reference values for a
+([`macro.py`](../src/oikoumene/macro/macro.py)) against published reference values for a
 **Business-As-Usual (BAU) scenario** running 2025 → 2100 with monthly
 integration steps (`dt_years = 1/12`, ~906 ODE steps).
 
@@ -23,7 +23,7 @@ Validation targets the equations ultimately derived from:
 - Earth4All (Dixson-Decleve et al. 2022) — social tension and renewable transition.
 - Hubbert (1956) — peak-and-decline resource curves.
 
-The numbers in §3 are produced by [`test_macro.py`](../test_macro.py) and
+The numbers in §3 are produced by [`test_macro.py`](../tests/test_macro.py) and
 are bit-reproducible from a clean checkout. v0.2.0 corrected six bugs in
 the v0.1.0 calibration that produced the previously-quoted CO₂ = 504.8 ppm
 trajectory; v0.2.1 left the standalone `test_macro.py` calibration path
@@ -80,7 +80,7 @@ limits late-century fossil burn.
 | 2095 | 657.3 | 2.62 | 0.575 | 0.350  | 8.38    | 7.01 | 0.70  | 2.08 |
 | 2100 | 677.4 | 2.73 | 0.608 | 0.329  | 8.37    | 8.21 | 0.74  | 2.18 |
 
-Full per-year trace is reproducible via `python test_macro.py | tee logs/validation.log`.
+Full per-year trace is reproducible via `python tests/test_macro.py | tee logs/validation.log`.
 
 ## 5. Known limitations
 
@@ -102,14 +102,14 @@ Full per-year trace is reproducible via `python test_macro.py | tee logs/validat
    centuries depending on era), latent population scale (hundreds to thousands
    of agents representing billions of humans), and grid resolution (0.5°).
    Concrete examples: the DICE damage coefficient `a = 0.01` in
-   [`macro.py:407`](../macro.py#L407) (vs. published DICE-2016R `a ≈ 0.00236`)
+   [`macro.py:407`](../src/oikoumene/macro/macro.py#L407) (vs. published DICE-2016R `a ≈ 0.00236`)
    reflects the simulator's accelerated time step; Hubbert depletion timescales
-   in [`macro.py:324`](../macro.py#L324) are scaled to scenario
+   in [`macro.py:324`](../src/oikoumene/macro/macro.py#L324) are scaled to scenario
    duration rather than transcribed from Hubbert (1956). Reviewers should
    treat the simulator as a *qualitatively faithful* implementation rather
    than a coefficient-by-coefficient replica.
 6. **JEPA scale.** The implementation in
-   [`world_model.py`](../world_model.py) faithfully realizes the
+   [`world_model.py`](../src/oikoumene/worldmodel/world_model.py) faithfully realizes the
    encoder + AdaLN predictor + SIGReg + CEM-planner architecture from
    LeCun (2022) and Maes et al. (2026), but at small scale
    (`latent_dim = 24` in `SharedWorldModel` defaults; `hidden_dim = 48`),
@@ -117,10 +117,10 @@ Full per-year trace is reproducible via `python test_macro.py | tee logs/validat
    v0.1's directional finite-difference gradient estimator with hand-written
    analytic back-propagation in pure NumPy, gradient-checked against central
    finite differences to <1e-8 relative error
-   ([`test_world_model_gradcheck.py`](../test_world_model_gradcheck.py));
+   ([`test_world_model_gradcheck.py`](../tests/test_world_model_gradcheck.py));
    v0.2.1 made the training-batch sampling deterministic via a per-instance
    `RandomState`, removing global-RNG coupling. v0.3.0 adds an opt-in PyTorch
-   backend ([`world_model_torch.py`](../world_model_torch.py)) with autograd
+   backend ([`world_model_torch.py`](../src/oikoumene/worldmodel/world_model_torch.py)) with autograd
    and optional CUDA for scaling `latent_dim` up; it reproduces the NumPy
    model at default settings (cross-backend encode/predict agree to <1e-4)
    and exposes the paper's Epps–Pulley SIGReg as an opt-in toggle.
@@ -133,7 +133,7 @@ Full per-year trace is reproducible via `python test_macro.py | tee logs/validat
    (2022) is similarly partial: the social tension model takes the structural
    form `f(inequality, food insecurity, env stress, expectation gap)` but the
    exact published coefficients are not fully available, so the calibration
-   in [`macro.py:192-200`](../macro.py#L192-L200) is bespoke.
+   in [`macro.py:192-200`](../src/oikoumene/macro/macro.py#L192-L200) is bespoke.
 
 ## 6. Parameter sensitivity (Sobol decomposition)
 
@@ -235,9 +235,10 @@ git clone https://github.com/GeoLambdaAI/oikoumene.git
 cd oikoumene
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
+pip install -e .
 
 # Run validation (≈ 2 seconds)
-python test_macro.py
+python tests/test_macro.py
 ```
 
 Expected exit code: `0`. Expected stdout final line: `OVERALL: ALL PASS`

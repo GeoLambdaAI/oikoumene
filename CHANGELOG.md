@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — package layout (no behaviour change)
+
+- Source moved into an installable `src/oikoumene/` package: `core/`,
+  `agents/`, `macro/`, `society/`, `worldmodel/`, `llm/`, `web/` (Flask app and
+  templates) and `datagen/` (the data generators). Repository locations
+  (`data/`, `logs/`, `static/`) are defined once in `oikoumene/paths.py`.
+- Tests moved to `tests/`; pytest finds the package via `pythonpath = ["src"]`.
+- `python app.py` still starts the server through a thin root wrapper; the
+  installed console script is `oikoumene` (`oikoumene.web.app:main`).
+- Data generators now run as modules after `pip install -e .`, e.g.
+  `python -m oikoumene.datagen.generate_earth_data`.
+- A per-tick trajectory fingerprint (`scripts/fingerprint.py`,
+  `tests/test_fingerprint.py`) pins the simulation bit for bit across the move.
+- Logger names follow the new module paths (e.g. `oikoumene.core.world`).
+
 ## [0.4.0] - 2026-11-21
 
 ### Changed — README claims aligned with the ablation

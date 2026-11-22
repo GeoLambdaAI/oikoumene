@@ -158,7 +158,7 @@ def test_bau_scenario_ipcc_envelope():
 
     This is the pytest-collected counterpart of ``run_bau_scenario`` so that the
     headline validation the paper cites is actually exercised by ``pytest`` (and
-    therefore by CI), not only by ``python test_macro.py``. Each anchor is asserted
+    therefore by CI), not only by ``python tests/test_macro.py``. Each anchor is asserted
     individually so a failure names the specific metric that drifted out of band.
     """
     checks = run_bau_scenario(verbose=False)
@@ -248,7 +248,7 @@ def test_hadcrut5_consistency_with_gistemp():
     Met Office Hadley Centre + CRU).
 
     Skips automatically when the user has not run
-        python generate_empirical_inputs.py --hadcrut5
+        python -m oikoumene.datagen.generate_empirical_inputs --hadcrut5
     so the test does not force a network download in CI.
 
     Validation rationale:
@@ -276,7 +276,7 @@ def test_hadcrut5_consistency_with_gistemp():
     if series is None:
         pytest.skip(
             "HadCRUT5 not fetched yet — run "
-            "`python generate_empirical_inputs.py --hadcrut5`"
+            "`python -m oikoumene.datagen.generate_empirical_inputs --hadcrut5`"
         )
 
     print("\n" + "=" * 70)

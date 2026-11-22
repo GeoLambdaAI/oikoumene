@@ -23,14 +23,15 @@ source .venv/bin/activate          # Windows: .venv\Scripts\activate
 
 # Runtime dependencies
 pip install -r requirements.txt
+pip install -e .
 
 # Dev tools (optional but recommended)
 pip install -e ".[dev]"
 
 # Pre-compute Earth data (one-time, ~30s total; needs internet for present-day)
-python generate_landmask.py
-python generate_earth_data.py
-python generate_present_day_data.py
+python -m oikoumene.datagen.generate_landmask
+python -m oikoumene.datagen.generate_earth_data
+python -m oikoumene.datagen.generate_present_day_data
 
 # Run the simulation
 export FLASK_SECRET_KEY=$(python -c "import secrets; print(secrets.token_hex(32))")
@@ -42,7 +43,7 @@ python app.py
 
 ```bash
 pytest                      # all tests
-pytest test_macro.py -v     # one file, verbose
+pytest tests/test_macro.py -v  # one file, verbose
 pytest --cov=. --cov-report=term-missing
 ```
 

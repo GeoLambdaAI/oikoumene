@@ -8,9 +8,9 @@ contracts on the downloader, not smoke tests.
 
 Run the relevant downloader once before running the corresponding test:
 
-    python generate_empirical_inputs.py --etopo
-    python generate_empirical_inputs.py --ucdp-ged
-    python generate_empirical_inputs.py --ne-rivers
+    python -m oikoumene.datagen.generate_empirical_inputs --etopo
+    python -m oikoumene.datagen.generate_empirical_inputs --ucdp-ged
+    python -m oikoumene.datagen.generate_empirical_inputs --ne-rivers
 
 See docs/data_attributions.md for source URLs, licences and citations.
 """
@@ -43,7 +43,7 @@ def test_etopo_elevation_loads_and_is_realistic():
     if elev is None:
         pytest.skip(
             "ETOPO not fetched yet — run "
-            "`python generate_empirical_inputs.py --etopo` "
+            "`python -m oikoumene.datagen.generate_empirical_inputs --etopo` "
             "(~395 MB one-time download)"
         )
 
@@ -109,7 +109,7 @@ def test_ucdp_ged_events_load_and_have_realistic_spread():
     if events is None:
         pytest.skip(
             "UCDP-GED not fetched yet — run "
-            "`python generate_empirical_inputs.py --ucdp-ged`"
+            "`python -m oikoumene.datagen.generate_empirical_inputs --ucdp-ged`"
         )
 
     print("\n" + "=" * 70)
@@ -183,7 +183,7 @@ def test_ne_10m_rivers_richer_than_shipped_110m():
     if not NE_10M_RIVERS_GEOJSON.exists():
         pytest.skip(
             "Natural Earth 10m rivers not fetched yet — run "
-            "`python generate_empirical_inputs.py --ne-rivers`"
+            "`python -m oikoumene.datagen.generate_empirical_inputs --ne-rivers`"
         )
 
     with open(NE_10M_RIVERS_GEOJSON) as f:

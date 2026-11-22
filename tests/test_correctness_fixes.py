@@ -189,7 +189,8 @@ def test_heldout_probe_detects_overfitting() -> None:
 
 @pytest.mark.parametrize("module", ["core/world.py", "core/scenarios.py", "macro/macro.py", "worldmodel/layers.py",
                                     "worldmodel/world_model.py", "core/history.py", "core/paleoclimate.py",
-                                    "society/technology.py"])
+                                    "society/technology.py", "llm/llm_module.py", "llm/url_safety.py",
+                                    "llm/generation.py"])
 def test_no_print_calls_in_simulation_modules(module: str) -> None:
     tree = ast.parse((PKG / module).read_text())
     prints = [n.lineno for n in ast.walk(tree)

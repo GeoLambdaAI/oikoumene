@@ -81,33 +81,16 @@ Issues = "https://github.com/GeoLambdaAI/oikoumene/issues"
 Changelog = "https://github.com/GeoLambdaAI/oikoumene/blob/main/CHANGELOG.md"
 
 [project.scripts]
-oikoumene = "app:main"
+oikoumene = "oikoumene.web.app:main"
 
-[tool.setuptools]
-py-modules = [
-    "agent_state",
-    "agents",
-    "app",
-    "bridge",
-    "earth",
-    "generate_earth_data",
-    "generate_empirical_inputs",
-    "generate_landmask",
-    "generate_present_day_data",
-    "geopolitics",
-    "god_mode",
-    "history",
-    "llm_module",
-    "macro",
-    "scenarios",
-    "shared_world_model",
-    "sim_logger",
-    "world",
-    "world_model",
-    "world_model_torch",
-]
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"oikoumene.web" = ["templates/*.html"]
 
 [tool.pytest.ini_options]
-testpaths = ["."]
+testpaths = ["tests"]
+pythonpath = ["src"]
 python_files = ["test_*.py"]
 addopts = "-v --tb=short"

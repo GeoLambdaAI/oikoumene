@@ -38,9 +38,9 @@ import numpy as np
 
 # Ensure top-level repo is importable when run as `python scripts/sensitivity.py`
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "src"))
 
-from macro import MacroModel  # noqa: E402
+from oikoumene.macro.macro import MacroModel  # noqa: E402
 
 RESULTS_DIR = Path(__file__).resolve().parent / "results"
 RESULTS_DIR.mkdir(exist_ok=True)

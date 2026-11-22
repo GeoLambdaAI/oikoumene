@@ -66,10 +66,10 @@ from scipy.optimize import brentq
 from scipy.stats import nct, t as t_dist, wilcoxon
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "src"))
 
-from agents import Agent  # noqa: E402
-from world import (DEFAULT_TRAIN_INTERVAL_TICKS, WORLD_MODEL_MODE_LABELS,  # noqa: E402
+from oikoumene.agents.agents import Agent  # noqa: E402
+from oikoumene.core.world import (DEFAULT_TRAIN_INTERVAL_TICKS, WORLD_MODEL_MODE_LABELS,  # noqa: E402
                    WORLD_MODEL_MODES, World)
 
 log = logging.getLogger("ablation_world_model")

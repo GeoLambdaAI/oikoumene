@@ -42,11 +42,11 @@ import numpy as np
 import scipy
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "src"))
 
-import empirical_ingest  # noqa: E402
-from scenarios import SCENARIOS  # noqa: E402
-from world import World  # noqa: E402
+from oikoumene.core import empirical_ingest  # noqa: E402
+from oikoumene.core.scenarios import SCENARIOS  # noqa: E402
+from oikoumene.core.world import World  # noqa: E402
 
 log = logging.getLogger("fingerprint")
 

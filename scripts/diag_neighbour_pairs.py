@@ -27,9 +27,9 @@ import numpy as np
 from scipy.spatial import cKDTree
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "src"))
 
-from world import World  # noqa: E402
+from oikoumene.core.world import World  # noqa: E402
 
 log = logging.getLogger("diag_neighbour_pairs")
 

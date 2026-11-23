@@ -21,7 +21,9 @@ Author approach: Senior Earth Scientist + Senior Geospatial Data Scientist
 """
 
 import os
+import sys
 import time
+from pathlib import Path
 
 import numpy as np
 
@@ -42,6 +44,7 @@ from oikoumene.datagen.earth_resources import (
     generate_freshwater,
     generate_minerals,
 )
+from oikoumene.datagen.cli_guard import run_guarded
 from oikoumene.paths import DATA_DIR
 
 
@@ -49,7 +52,13 @@ from oikoumene.paths import DATA_DIR
 # MAIN: Generate All Grids
 # ============================================================================
 
-def main():
+OUTPUT_FILES: tuple[str, ...] = tuple(
+    f"earth_{name}.npy" for name in ("elevation", "temperature", "precipitation", "biome", "terrain",
+                                     "fertility", "minerals", "freshwater", "fossil_fuels")
+)
+
+
+def main(output_dir: Path = DATA_DIR):
     t_start = time.time()
     print("=" * 70)
     print("EARTH SYSTEM DATA GENERATOR")
@@ -108,7 +117,7 @@ def main():
     }
 
     for name, grid in grids.items():
-        path = os.path.join(DATA_DIR, f"earth_{name}.npy")
+        path = os.path.join(output_dir, f"earth_{name}.npy")
         np.save(path, grid)
         size_kb = os.path.getsize(path) / 1024
         print(f"  {name}: {grid.shape}, dtype={grid.dtype}, {size_kb:.0f} KB")
@@ -138,5 +147,10 @@ def main():
     print("Done!")
 
 
+def cli(argv: list[str] | None = None) -> int:
+    """Command line: ``--output-dir``, ``--force``; refuses to overwrite existing grids."""
+    return run_guarded("Generate the 0.5° Earth system grids (earth_*.npy).", OUTPUT_FILES, main, argv)
+
+
 if __name__ == "__main__":
-    main()
+    sys.exit(cli())

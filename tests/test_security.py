@@ -207,3 +207,39 @@ def test_log_download_guard(tmp_path, monkeypatch):
     assert client.get("/api/logger/download/20260101_000001").status_code == 400  # symlink escape
     assert client.get("/api/logger/download/20260101_000002").status_code == 404  # well-formed, absent
     assert client.get("/api/logger/download/not_a_run_id").status_code == 400  # bad format
+
+
+# ---------------------------------------------------------------------------
+# CORS allowlist and startup URL follow the configured port
+# ---------------------------------------------------------------------------
+
+def test_cors_default_port():
+    import oikoumene.web.app as A
+
+    assert A._configured_port({}) == 5000
+    assert A._cors_allowed_origins({}) == ["http://localhost:5000", "http://127.0.0.1:5000"]
+
+
+def test_cors_follows_custom_port():
+    import oikoumene.web.app as A
+
+    env = {"PORT": "5001"}
+    assert A._configured_port(env) == 5001
+    assert A._cors_allowed_origins(env) == ["http://localhost:5001", "http://127.0.0.1:5001"]
+
+
+def test_explicit_cors_overrides_default_and_custom_port():
+    import oikoumene.web.app as A
+
+    explicit = " https://sim.example.org , https://proxy.example.org ,"
+    expected = ["https://sim.example.org", "https://proxy.example.org"]
+    assert A._cors_allowed_origins({"CORS_ALLOWED_ORIGINS": explicit}) == expected
+    assert A._cors_allowed_origins({"CORS_ALLOWED_ORIGINS": explicit, "PORT": "5001"}) == expected
+
+
+def test_startup_url_uses_loopback_ip_and_port():
+    import oikoumene.web.app as A
+
+    assert A._browser_url("127.0.0.1", 5000) == "http://127.0.0.1:5000"
+    assert A._browser_url("0.0.0.0", 5001) == "http://127.0.0.1:5001"
+    assert A._browser_url("sim.internal", 8080) == "http://sim.internal:8080"

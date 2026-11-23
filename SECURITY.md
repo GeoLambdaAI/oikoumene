@@ -17,7 +17,7 @@ security defaults are tuned for that scenario.
 |---|---|
 | Path traversal via crafted `run_id` in `/api/logger/download/<run_id>` | `run_id` is regex-validated to the `YYYYMMDD_HHMMSS` format produced by `sim_logger.py`; the resolved path is verified to stay under the repository's `logs/` directory ([app.py](src/oikoumene/web/app.py)). |
 | Predictable Flask session-signing key | If `FLASK_SECRET_KEY` is unset, a per-process random key is generated (`secrets.token_hex(32)`) and a warning is printed ([app.py](src/oikoumene/web/app.py)). |
-| Cross-origin requests driving the SocketIO API | `cors_allowed_origins` defaults to `http://localhost:5000` and `http://127.0.0.1:5000`. Override via `CORS_ALLOWED_ORIGINS` (comma-separated) only when fronted by an authenticated reverse proxy. |
+| Cross-origin requests driving the SocketIO API | `cors_allowed_origins` defaults to `http://localhost:<PORT>` and `http://127.0.0.1:<PORT>` (port 5000 unless `PORT` is set). Override via `CORS_ALLOWED_ORIGINS` (comma-separated) only when fronted by an authenticated reverse proxy. |
 | LAN exposure of the unauthenticated control surface | The server binds to `127.0.0.1` by default. `BIND_HOST=0.0.0.0` is only honoured when explicitly set, and a warning is printed in that case. |
 | Leakage of LLM `api_key` to clients | `LLMModule.get_status()` returns provider / model / base_url but never the key. `world.get_full_state()` (sent over SocketIO and dumped to snapshots) inherits this whitelist. |
 

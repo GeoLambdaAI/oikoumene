@@ -194,12 +194,13 @@ def test_heldout_probe_detects_overfitting() -> None:
                                     "agents/agents.py", "agents/traits.py", "agents/memory.py", "agents/movement.py",
                                     "agents/planning.py", "agents/actions.py", "core/world_spatial.py",
                                     "core/resources.py", "core/settlements.py", "core/world_paleo.py",
-                                    "core/world_views.py"])
+                                    "core/world_views.py", "datagen/cli_guard.py"])
 def test_no_print_calls_in_simulation_modules(module: str) -> None:
     """Simulation modules log instead of printing.
 
     Exception: the ``datagen/`` generators are command-line scripts whose progress
-    output is ``print`` by design, so they are deliberately not in this list.
+    output is ``print`` by design, so they are deliberately not in this list. Their
+    shared guard ``datagen/cli_guard.py`` logs and is covered.
     """
     tree = ast.parse((PKG / module).read_text())
     prints = [n.lineno for n in ast.walk(tree)

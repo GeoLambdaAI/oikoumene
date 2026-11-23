@@ -55,7 +55,7 @@ Each agent's movement bias and action intensity come from a cross-entropy-method
 > 
 > **Tested on:**
 > - Ubuntu 22.04 ARM, Python 3.11.
-> - macOS: requires Python 3.11+ (e.g. `conda create -n oikoumene python=3.11` or `python3.11 -m venv .venv`); Python 3.9 from miniconda base will fail due to eventlet/kqueue incompatibility. Disable AirPlay Receiver or use another port: `PORT=5001 CORS_ALLOWED_ORIGINS=http://localhost:5001,http://127.0.0.1:5001 python app.py`.
+> - macOS: requires Python 3.11+ (e.g. `conda create -n oikoumene python=3.11` or `python3.11 -m venv .venv`); Python 3.9 from miniconda base will fail due to eventlet/kqueue incompatibility. Open http://127.0.0.1:5000, not localhost: on macOS the AirPlay Receiver also listens on port 5000 and "localhost" can reach it instead of the app (HTTP 403); either disable AirPlay Receiver or use another port, e.g. `PORT=5001 python app.py`.
 > 
 > - Windows: untested, please file issues.
 
@@ -157,17 +157,22 @@ regenerated `earth_*.npy` float grids differ from the committed ones only by flo
 results: the trained JEPA weights differ in every fingerprint run and a 1000-tick historical run
 diverges from tick 991. `generate_present_day_data` fetches live data, so its output depends on the upstream sources on the day.
 
+Each generator refuses to overwrite existing output files: it lists them, exits non-zero and writes
+nothing. Pass `--force` to overwrite, or `--output-dir DIR` to write somewhere else (for example to
+compare against the reference); inputs are always read from `data/`. `--help` only prints usage.
+
 ```bash
-python -m oikoumene.datagen.generate_landmask         # ~10s — rasterizes Natural Earth coastlines
-python -m oikoumene.datagen.generate_earth_data       # ~1s  — climate zones, resources, biomes
-python -m oikoumene.datagen.generate_present_day_data # ~15s — World Bank API, NOAA, NASA (needs internet)
+python -m oikoumene.datagen.generate_earth_data --output-dir /tmp/earth  # compare without touching data/
+python -m oikoumene.datagen.generate_landmask --force          # ~10s — rasterizes Natural Earth coastlines
+python -m oikoumene.datagen.generate_earth_data --force        # ~1s  — climate zones, resources, biomes
+python -m oikoumene.datagen.generate_present_day_data --force  # ~15s — World Bank API, NOAA, NASA (needs internet)
 ```
 
 ### Run
 
 ```bash
 python app.py
-# Open http://localhost:5000
+# Open http://127.0.0.1:5000 (the server prints the URL for the configured PORT)
 # Select scenario → Click Start
 ```
 

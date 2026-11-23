@@ -356,6 +356,8 @@ def test_hadcrut5_consistency_with_gistemp():
 
 
 if __name__ == "__main__":
+    import pytest
+
     _checks = run_bau_scenario()
     success = all(ok for _, ok, _, _ in _checks)
     unit_ok = True
@@ -369,9 +371,9 @@ if __name__ == "__main__":
         except AssertionError as exc:
             print(f"  FAILED: {exc}")
             unit_ok = False
-        except Exception:
-            # skipped via pytest.skip(...) when invoked outside pytest -- ignore
-            pass
+        except pytest.skip.Exception as exc:
+            # pytest.skip(...) raises Skipped, a BaseException: count it as skipped, not failed.
+            print(f"  SKIPPED: {exc}")
     print("\n" + "=" * 70)
     overall = success and unit_ok
     print(f"OVERALL: {'ALL PASS' if overall else 'SOME FAILED'}")

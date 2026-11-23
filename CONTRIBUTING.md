@@ -29,16 +29,15 @@ pip install -e .
 pip install -e ".[dev]"
 
 # Earth data ships in data/ — do not regenerate it for normal development.
-# Regenerating overwrites the reference files, changes simulation results and
-# fails tests/test_data_integrity.py (see README, "Generate Earth Data").
-#   python -m oikoumene.datagen.generate_landmask
-#   python -m oikoumene.datagen.generate_earth_data
-#   python -m oikoumene.datagen.generate_present_day_data
+# The generators refuse to overwrite existing files; --force overwrites the
+# reference, changes simulation results and fails tests/test_data_integrity.py
+# (see README, "Generate Earth Data"). To compare, write elsewhere:
+#   python -m oikoumene.datagen.generate_earth_data --output-dir /tmp/earth
 
 # Run the simulation
 export FLASK_SECRET_KEY=$(python -c "import secrets; print(secrets.token_hex(32))")
 python app.py
-# Open http://localhost:5000
+# Open http://127.0.0.1:5000
 ```
 
 ## Running Tests

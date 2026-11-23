@@ -20,11 +20,14 @@ Output: data/present_day_*.{npy,json,npz}
 
 import os
 import json
+import sys
 import time
+from pathlib import Path
 import numpy as np
 import requests
 from datetime import date
 
+from oikoumene.datagen.cli_guard import run_guarded
 from oikoumene.paths import DATA_DIR
 
 GRID_LAT_MIN, GRID_LAT_MAX = -60.0, 75.0
@@ -465,7 +468,13 @@ def estimate_resource_grids(countries: list[dict]) -> dict:
 # Main Pipeline
 # ============================================================================
 
-def main():
+OUTPUT_FILES: tuple[str, ...] = (
+    "present_day_population.npy", "present_day_resources.npz", "present_day_climate.json",
+    "present_day_countries.json", "present_day_conflicts.json", "present_day_metadata.json",
+)
+
+
+def main(output_dir: Path = DATA_DIR):
     t_start = time.time()
     print("=" * 70)
     print("PRESENT-DAY DATA PIPELINE")
@@ -500,22 +509,22 @@ def main():
     resources = estimate_resource_grids(countries)
 
     # Save everything
-    print("\nSaving to data/...")
-    np.save(DATA_DIR / "present_day_population.npy", pop_grid)
+    print(f"\nSaving to {output_dir}/...")
+    np.save(output_dir / "present_day_population.npy", pop_grid)
     print(f"  present_day_population.npy: {pop_grid.shape}")
 
-    np.savez(DATA_DIR / "present_day_resources.npz", **resources)
+    np.savez(output_dir / "present_day_resources.npz", **resources)
     print(f"  present_day_resources.npz: food, minerals, fossil_fuels, freshwater")
 
-    with open(DATA_DIR / "present_day_climate.json", "w") as f:
+    with open(output_dir / "present_day_climate.json", "w") as f:
         json.dump(climate, f, indent=2)
     print(f"  present_day_climate.json")
 
-    with open(DATA_DIR / "present_day_countries.json", "w") as f:
+    with open(output_dir / "present_day_countries.json", "w") as f:
         json.dump(countries, f, indent=2)
     print(f"  present_day_countries.json: {len(countries)} countries")
 
-    with open(DATA_DIR / "present_day_conflicts.json", "w") as f:
+    with open(output_dir / "present_day_conflicts.json", "w") as f:
         json.dump(ACTIVE_CONFLICTS, f, indent=2)
     print(f"  present_day_conflicts.json: {len(ACTIVE_CONFLICTS)} conflicts")
 
@@ -528,7 +537,7 @@ def main():
         "co2_ppm": climate["co2_ppm"],
         "temperature_anomaly": climate["temperature_anomaly"],
     }
-    with open(DATA_DIR / "present_day_metadata.json", "w") as f:
+    with open(output_dir / "present_day_metadata.json", "w") as f:
         json.dump(metadata, f, indent=2)
 
     # Validation
@@ -557,5 +566,10 @@ def main():
     print(f"  Total time: {time.time() - t_start:.1f}s")
 
 
+def cli(argv: list[str] | None = None) -> int:
+    """Command line: ``--output-dir``, ``--force``; refuses to overwrite existing present-day files."""
+    return run_guarded("Fetch and grid present-day data for Scenario B (present_day_*).", OUTPUT_FILES, main, argv)
+
+
 if __name__ == "__main__":
-    main()
+    sys.exit(cli())

@@ -18,7 +18,10 @@ from shapely.geometry import shape, Point, MultiPolygon
 from shapely.prepared import prep
 import time
 import os
+import sys
+from pathlib import Path
 
+from oikoumene.datagen.cli_guard import run_guarded
 from oikoumene.paths import DATA_DIR
 
 RESOLUTION = 0.25  # degrees per cell
@@ -26,7 +29,6 @@ LAT_MIN, LAT_MAX = -90.0, 90.0
 LNG_MIN, LNG_MAX = -180.0, 180.0
 
 GEOJSON_PATH = os.path.join(DATA_DIR, "ne_110m_land.geojson")
-OUTPUT_PATH = os.path.join(DATA_DIR, "landmask.npy")
 
 
 def load_land_polygons():
@@ -91,16 +93,20 @@ def rasterize(land_geometry, resolution=RESOLUTION):
     return mask
 
 
-def main():
+OUTPUT_FILES: tuple[str, ...] = ("landmask.npy",)
+
+
+def main(output_dir: Path = DATA_DIR):
+    output_path = os.path.join(output_dir, "landmask.npy")
     print("Loading Natural Earth 110m land polygons...")
     land = load_land_polygons()
     print(f"  {land.geom_type} with {len(land.geoms) if hasattr(land, 'geoms') else 1} parts")
 
     mask = rasterize(land)
 
-    print(f"\nSaving to {OUTPUT_PATH}")
-    np.save(OUTPUT_PATH, mask)
-    print(f"File size: {os.path.getsize(OUTPUT_PATH) / 1024:.1f} KB")
+    print(f"\nSaving to {output_path}")
+    np.save(output_path, mask)
+    print(f"File size: {os.path.getsize(output_path) / 1024:.1f} KB")
 
     # Quick validation
     print("\nValidation:")
@@ -124,5 +130,11 @@ def main():
     check("North Sea", 56.0, 3.0, False)
 
 
+def cli(argv: list[str] | None = None) -> int:
+    """Command line: ``--output-dir``, ``--force``; refuses to overwrite an existing land mask."""
+    return run_guarded("Rasterise Natural Earth 110m land polygons to a 0.25° land mask (landmask.npy).",
+                       OUTPUT_FILES, main, argv)
+
+
 if __name__ == "__main__":
-    main()
+    sys.exit(cli())

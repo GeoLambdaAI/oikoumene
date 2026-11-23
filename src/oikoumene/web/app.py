@@ -2,7 +2,7 @@
 Flask + SocketIO server for Oikoumene.
 Provides real-time WebSocket updates and a zoomable world map interface.
 
-At about 680 lines this module is above the 600-line target and deliberately not
+At about 710 lines this module is above the 600-line target and deliberately not
 split: every route and SocketIO handler registers on the module-level ``app`` and
 ``socketio`` and shares the module's mutable simulation state (``world``,
 ``sim_running``, ``sim_speed``, ``loop_generation``, ``world_lock``) through
@@ -18,6 +18,7 @@ import os
 import re
 import secrets
 import time
+from collections.abc import Mapping
 
 from flask import Flask, render_template, jsonify, request
 from flask_socketio import SocketIO
@@ -43,14 +44,35 @@ if not _secret_key:
     print("[security] FLASK_SECRET_KEY unset — using ephemeral random key for this process.")
 app.config["SECRET_KEY"] = _secret_key
 
-# CORS: restrict to localhost by default. Override via CORS_ALLOWED_ORIGINS
-# (comma-separated) when fronted by an authenticated reverse proxy.
-_cors_env = os.environ.get("CORS_ALLOWED_ORIGINS", "").strip()
-_cors_origins = (
-    [o.strip() for o in _cors_env.split(",") if o.strip()]
-    if _cors_env
-    else ["http://localhost:5000", "http://127.0.0.1:5000"]
-)
+DEFAULT_PORT = 5000
+
+
+def _configured_port(environ: Mapping[str, str]) -> int:
+    """Server port: ``PORT`` if set, else 5000."""
+    return int(environ.get("PORT", DEFAULT_PORT))
+
+
+def _cors_allowed_origins(environ: Mapping[str, str]) -> list[str]:
+    """SocketIO origin allowlist.
+
+    An explicit comma-separated ``CORS_ALLOWED_ORIGINS`` wins (for an authenticated
+    reverse proxy). Otherwise only localhost and 127.0.0.1 on the configured port.
+    """
+    cors_env = environ.get("CORS_ALLOWED_ORIGINS", "").strip()
+    if cors_env:
+        return [o.strip() for o in cors_env.split(",") if o.strip()]
+    port = _configured_port(environ)
+    return [f"http://localhost:{port}", f"http://127.0.0.1:{port}"]
+
+
+def _browser_url(host: str, port: int) -> str:
+    """URL for the startup banner. 127.0.0.1, not localhost: on macOS the AirPlay
+    receiver listens on port 5000 and "localhost" can reach it instead (HTTP 403)."""
+    display_host = "127.0.0.1" if host in ("127.0.0.1", "0.0.0.0") else host
+    return f"http://{display_host}:{port}"
+
+
+_cors_origins = _cors_allowed_origins(os.environ)
 socketio = SocketIO(app, cors_allowed_origins=_cors_origins, async_mode="eventlet")
 
 # Global simulation state
@@ -662,7 +684,7 @@ def main() -> None:
     Exposed as the ``oikoumene`` script via [project.scripts] so the package
     is runnable after ``pip install`` as well as via ``python app.py``.
     """
-    port = int(os.environ.get("PORT", 5000))
+    port = _configured_port(os.environ)
     # Default to loopback so the unauthenticated control surface is not
     # exposed on the LAN. Set BIND_HOST=0.0.0.0 explicitly only when the
     # server is fronted by an authenticated reverse proxy.
@@ -671,10 +693,9 @@ def main() -> None:
     # messages that used to be print()ed stay visible.
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     create_world()
-    display_host = "localhost" if host in ("127.0.0.1", "0.0.0.0") else host
     print("=" * 60)
     print("  Oikoumene — Earth")
-    print(f"  Open http://{display_host}:{port} in your browser")
+    print(f"  Open {_browser_url(host, port)} in your browser")
     if host == "0.0.0.0":
         print("  WARNING: bound to 0.0.0.0 — reachable from the network.")
         print("           Endpoints are not authenticated; place behind a")

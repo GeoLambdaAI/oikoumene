@@ -35,8 +35,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `tests/test_data_integrity.py` pins the SHA-256 of the nine committed
   `data/earth_*.npy` reference grids.
 
+### Fixed
+
+- Data generators no longer overwrite the reference on any invocation.
+  `generate_earth_data`, `generate_landmask` and `generate_present_day_data`
+  gain a shared command line (`datagen/cli_guard.py`): `--help` only prints
+  usage, `--output-dir` (default `data/`) redirects the outputs, and without
+  `--force` a run against existing output files lists them, exits 1 and writes
+  nothing. Generation logic is unchanged (identical hashes into a temporary
+  `--output-dir`). `generate_empirical_inputs` already had a safe CLI.
+  Tests: `tests/test_datagen_cli.py`.
+- Startup banner prints `http://127.0.0.1:<PORT>` instead of `localhost` (on
+  macOS the AirPlay Receiver on port 5000 answers "localhost" with HTTP 403).
+- Default SocketIO CORS allowlist follows `PORT` (`localhost` and `127.0.0.1`
+  on that port); previously it was fixed to port 5000, so `PORT=5001` broke
+  the UI unless `CORS_ALLOWED_ORIGINS` was set too. An explicit
+  `CORS_ALLOWED_ORIGINS` still takes precedence.
+- `python tests/test_macro.py` exits 0 when HadCRUT5 is not fetched: a
+  `pytest.skip` in standalone mode is reported as `SKIPPED` instead of
+  escaping as an uncaught `Skipped` (a `BaseException`).
+
 ### Documentation
 
+- README, HowTo and CONTRIBUTING document `--force` and `--output-dir`; README,
+  HowTo, CONTRIBUTING and SECURITY use `127.0.0.1` and the port-derived CORS
+  default.
 - README and HowTo: generating the data is optional (the files ship in
   `data/`); regenerating overwrites the reference files and changes simulation
   results. README module table updated for the split modules; its line-count

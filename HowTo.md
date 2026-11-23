@@ -84,13 +84,20 @@ regenerated `earth_*.npy` float grids differ from the committed ones only by flo
 results: the trained JEPA weights differ in every fingerprint run and a 1000-tick historical run
 diverges from tick 991. `generate_present_day_data` fetches live data, so its output depends on the upstream sources on the day.
 
+Each generator refuses to overwrite existing output files: it lists them, exits non-zero and writes
+nothing. Pass `--force` to overwrite, or `--output-dir DIR` to write somewhere else (for example to
+compare against the reference); inputs are always read from `data/`. `--help` only prints usage.
+
 To regenerate anyway, run the three scripts from the repository root:
 
 ```bash
-python -m oikoumene.datagen.generate_landmask          # ~10s  — rasterises Natural Earth coastlines to 0.25°
-python -m oikoumene.datagen.generate_earth_data        # ~1s   — climate / biomes / resources at 0.5°
-python -m oikoumene.datagen.generate_present_day_data  # ~15s  — fetches World Bank / NOAA / NASA (needs internet)
+python -m oikoumene.datagen.generate_landmask --force          # ~10s  — rasterises Natural Earth coastlines to 0.25°
+python -m oikoumene.datagen.generate_earth_data --force        # ~1s   — climate / biomes / resources at 0.5°
+python -m oikoumene.datagen.generate_present_day_data --force  # ~15s  — fetches World Bank / NOAA / NASA (needs internet)
 ```
+
+To compare with the reference instead, write to a scratch directory:
+`python -m oikoumene.datagen.generate_earth_data --output-dir /tmp/earth`.
 
 Output appears in [`data/`](data/) — `landmask.npy`, `earth_*.npy`, `ne_110m_*.geojson`,
 and the `present_day_*.json/.npz` files for Scenario B.
@@ -114,11 +121,13 @@ You should see:
 ```
 ============================================================
   Oikoumene — Earth
-  Open http://localhost:5000 in your browser
+  Open http://127.0.0.1:5000 in your browser
 ============================================================
 ```
 
-Open the URL, choose a scenario, click **Start**.
+Open the URL, choose a scenario, click **Start**. Use 127.0.0.1 rather than localhost: on macOS the AirPlay
+Receiver also listens on port 5000 and "localhost" can reach it instead (HTTP 403); alternatively run on
+another port with `PORT=5001 python app.py`.
 
 ### Scenario quick-reference
 
@@ -138,7 +147,7 @@ Both scenarios use the same code path; the difference is initial conditions.
 | `PORT` | `5000` | HTTP and WebSocket port |
 | `BIND_HOST` | `127.0.0.1` | Listen address. **Only set to `0.0.0.0` behind an authenticated reverse proxy** — the simulator endpoints are unauthenticated by design (see [SECURITY.md](SECURITY.md)). |
 | `FLASK_SECRET_KEY` | random per process | Flask session signing key. If unset, an ephemeral key is generated at startup with a `[security]` warning. Set explicitly for reproducible sessions across restarts. |
-| `CORS_ALLOWED_ORIGINS` | `http://localhost:5000,http://127.0.0.1:5000` | Comma-separated origin allowlist for the SocketIO API |
+| `CORS_ALLOWED_ORIGINS` | `http://localhost:<PORT>,http://127.0.0.1:<PORT>` | Comma-separated origin allowlist for the SocketIO API; when set it replaces the port-derived default |
 
 ### Common configurations
 
@@ -272,7 +281,7 @@ Output appears in `logs/{run_id}/figures/`. Six standard plots:
 ### Download a CSV via the API
 
 ```bash
-curl http://localhost:5000/api/logger/download/20260505_142536 -o run.csv
+curl http://127.0.0.1:5000/api/logger/download/20260505_142536 -o run.csv
 ```
 
 The `run_id` is regex-validated against the timestamp format — arbitrary

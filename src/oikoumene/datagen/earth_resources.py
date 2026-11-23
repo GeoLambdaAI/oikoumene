@@ -10,9 +10,7 @@ import json
 import os
 
 import numpy as np
-from shapely.geometry import shape, Point, LineString, MultiLineString
-from shapely.ops import unary_union
-from shapely.prepared import prep
+from shapely.geometry import shape, Point
 
 from oikoumene.datagen.earth_climate import (
     Biome,

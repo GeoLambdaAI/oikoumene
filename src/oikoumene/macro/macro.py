@@ -294,7 +294,6 @@ class MacroModel:
         tech = max(0.5, y[_IDX["tech"]])
         renewable = np.clip(y[_IDX["renewable"]], 0.0, 1.0)
         freshwater = np.clip(y[_IDX["freshwater"]], 0.0, 1.0)
-        sea_level = y[_IDX["sea_level"]]
 
         # Agent feedback signals (with defaults for standalone runs)
         emission_multiplier = feedback.get("emission_multiplier", 1.0)

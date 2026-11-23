@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <sub><em>This simulation was developed primarily with Claude Code, Anthropic's agentic CLI, using both Claude Opus 4.6 and Opus 4.7. The collaboration served as a real-world stress test of the latest coding LLM through extensive prompt engineering.</em></sub>
+  <sub><em>This simulation was developed primarily with Claude Code, Anthropic's agentic CLI, using Claude Opus 4.6, Opus 4.7 and Opus 5.5. The collaboration served as a real-world stress test of successive coding models, combining extensive prompt engineering, spec-driven development and human review at key decision points. Changes are verified by a test suite and a bit-exact trajectory fingerprint.</em></sub>
 </p>
 
 # Oikoumene: Autonomous Agent Civilization Simulator
@@ -475,7 +475,8 @@ Module paths are relative to `src/oikoumene/`; tests live in `tests/`.
 | `core/resources.py` | `ResourceMap`: per-cell resources, harvesting, regeneration |
 | `core/settlements.py` | `Business`, `Settlement` and `SettlementsMixin` for `World`: businesses, nearest settlement, settlement formation |
 | `core/world_paleo.py` | `PaleoMixin` for `World`: migration frontier, ice-age effects, paleo-to-macro handoff |
-| `core/world_views.py` | `ViewsMixin` for `World`: era-aware UI summaries, full state, runtime JEPA backend swap |
+| `core/world_views.py` | `ViewsMixin` for `World`: read-only views: era-aware UI summaries, full state, JEPA status |
+| `core/world_jepa.py` | `JepaBackendMixin` for `World`: runtime JEPA backend/preset swap (`set_jepa_backend`, `JEPA_PRESETS`) |
 | `worldmodel/world_model.py` | JEPA implementation (NumPy, hand-written backprop): encoder, predictor (AdaLN), SIGReg loss, CEM planner, deterministic batch sampling |
 | `worldmodel/layers.py` | NumPy layer primitives with forward and backward passes (linear, GELU, RMSNorm, AdaLN, SIGReg) and Adam |
 | `worldmodel/world_model_torch.py` | Optional PyTorch JEPA backend (autograd): same architecture, CUDA-ready, Epps–Pulley SIGReg toggle, NumPy weight bridge |

@@ -163,15 +163,3 @@ class ResourceMap:
         self.minerals = np.minimum(self.minerals + self.minerals_regen * 0.05, 100.0)
         self.wood = np.minimum(self.wood + self.wood_regen * 0.08, 100.0)
         self.water = np.minimum(self.water + self.water_regen * 0.1, 100.0)
-
-    def to_grid_data(self) -> dict:
-        """Serialize for UI (only non-zero cells to save bandwidth)."""
-        return {
-            "food": self.food.tolist(),
-            "minerals": self.minerals.tolist(),
-            "wood": self.wood.tolist(),
-            "water": self.water.tolist(),
-            "cell_size_deg": self.cell_size_deg,
-            "cols": self.cols,
-            "rows": self.rows,
-        }

@@ -128,7 +128,7 @@ def main(output_dir: Path = DATA_DIR):
     print("=" * 70)
     land_cells = int(land_mask.sum())
     print(f"Land cells: {land_cells:,} / {ROWS*COLS:,} ({land_cells/(ROWS*COLS)*100:.1f}%)")
-    print(f"\nBiome distribution (land only):")
+    print("\nBiome distribution (land only):")
     for biome_id in sorted(Biome.NAMES.keys()):
         if biome_id == 0:
             continue
@@ -137,8 +137,10 @@ def main(output_dir: Path = DATA_DIR):
             pct = count / land_cells * 100
             print(f"  {Biome.NAMES[biome_id]:30s}: {count:6d} cells ({pct:5.1f}%)")
 
-    print(f"\nTemperature range (land): {temperature[land_mask > 0].min():.1f}°C to {temperature[land_mask > 0].max():.1f}°C")
-    print(f"Precipitation range (land): {precipitation[land_mask > 0].min():.0f} to {precipitation[land_mask > 0].max():.0f} mm/yr")
+    print(f"\nTemperature range (land): {temperature[land_mask > 0].min():.1f}°C "
+          f"to {temperature[land_mask > 0].max():.1f}°C")
+    print(f"Precipitation range (land): {precipitation[land_mask > 0].min():.0f} "
+          f"to {precipitation[land_mask > 0].max():.0f} mm/yr")
     print(f"Mean fertility (land): {fertility[land_mask > 0].mean():.3f}")
     print(f"Mean mineral richness (land): {minerals[land_mask > 0].mean():.3f}")
 

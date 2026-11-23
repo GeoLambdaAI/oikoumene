@@ -18,7 +18,6 @@ Data sources (all free, no API key):
 Output: data/present_day_*.{npy,json,npz}
 """
 
-import os
 import json
 import sys
 import time
@@ -177,7 +176,7 @@ def fetch_climate_state() -> dict:
         resp = requests.get(
             "https://gml.noaa.gov/webdata/ccgg/trends/co2/co2_annmean_mlo.txt",
             timeout=15)
-        lines = [l for l in resp.text.split('\n') if l.strip() and not l.startswith('#')]
+        lines = [line for line in resp.text.split('\n') if line.strip() and not line.startswith('#')]
         last = lines[-1].split()
         climate["co2_ppm"] = float(last[1])
         print(f"    CO2: {climate['co2_ppm']} ppm ({last[0]})")
@@ -514,11 +513,11 @@ def main(output_dir: Path = DATA_DIR):
     print(f"  present_day_population.npy: {pop_grid.shape}")
 
     np.savez(output_dir / "present_day_resources.npz", **resources)
-    print(f"  present_day_resources.npz: food, minerals, fossil_fuels, freshwater")
+    print("  present_day_resources.npz: food, minerals, fossil_fuels, freshwater")
 
     with open(output_dir / "present_day_climate.json", "w") as f:
         json.dump(climate, f, indent=2)
-    print(f"  present_day_climate.json")
+    print("  present_day_climate.json")
 
     with open(output_dir / "present_day_countries.json", "w") as f:
         json.dump(countries, f, indent=2)

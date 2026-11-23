@@ -30,6 +30,10 @@ jobs:
           pip install -r requirements.txt
           pip install -e ".[dev]"
 
+      # Lint the package and the start wrapper (config in pyproject.toml [tool.ruff]).
+      - name: Ruff
+        run: ruff check src app.py
+
       # The committed data/ files let the world build without network access;
       # the optional torch backend is not installed here, so its test module
       # skips via pytest.importorskip — exercising the graceful-degradation path.

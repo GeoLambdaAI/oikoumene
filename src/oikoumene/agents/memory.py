@@ -63,16 +63,6 @@ class AgentMemory:
                 "uses": 1
             }
 
-    def get_best_strategy(self, context: str) -> Optional[dict]:
-        """Find the most effective strategy for a context."""
-        best = None
-        best_score = -1
-        for name, strategy in self.procedural.items():
-            if context in name and strategy["effectiveness"] > best_score:
-                best = strategy
-                best_score = strategy["effectiveness"]
-        return best
-
     def get_summary(self) -> dict:
         return {
             "episodes": len(self.episodic),

@@ -14,7 +14,7 @@ Data source: Natural Earth (naturalearthdata.com)
 
 import json
 import numpy as np
-from shapely.geometry import shape, Point, MultiPolygon
+from shapely.geometry import shape, Point
 from shapely.prepared import prep
 import time
 import os
@@ -88,7 +88,7 @@ def rasterize(land_geometry, resolution=RESOLUTION):
 
     print(f"\nDone in {elapsed:.1f}s")
     print(f"Land cells: {land_cells:,} / {total_cells:,} ({land_pct:.1f}%)")
-    print(f"Expected: ~29% land (Earth's actual land fraction)")
+    print("Expected: ~29% land (Earth's actual land fraction)")
 
     return mask
 

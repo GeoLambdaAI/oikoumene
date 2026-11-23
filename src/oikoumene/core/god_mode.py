@@ -11,7 +11,7 @@ The system is fully optional and togglable.
 
 import numpy as np
 from dataclasses import dataclass, field
-from typing import Optional, Any
+from typing import Optional
 
 
 @dataclass
@@ -375,7 +375,6 @@ class GodMode:
         complied = rng.random() < compliance_prob
 
         goal_parsed = self._parse_goal_from_message(text)
-        effect_description = ""
 
         if complied and goal_parsed:
             # Override agent's current goal
@@ -392,7 +391,6 @@ class GodMode:
             agent.memory.learn_fact("divine_commanded", 1.0)
 
             agent.divine_trust = min(1.0, divine_trust * 1.1)
-            effect_description = f"Complied! Now pursuing: {goal_parsed}"
 
         elif complied:
             # Message had no clear goal but agent still listened
@@ -400,12 +398,10 @@ class GodMode:
             agent.happiness = min(100, agent.happiness + 3)
             agent.memory.learn_fact("divine_blessing", 0.8)
             agent.divine_trust = min(1.0, divine_trust * 1.05)
-            effect_description = "Received blessing (no specific command found)"
 
         else:
             # Refused
             agent.divine_trust = max(0.1, divine_trust * 0.85)
-            effect_description = "Refused the divine message"
 
         agent.memory.store_episode({
             "type": "divine_message",

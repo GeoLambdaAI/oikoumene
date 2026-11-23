@@ -194,7 +194,8 @@ def test_heldout_probe_detects_overfitting() -> None:
                                     "agents/agents.py", "agents/traits.py", "agents/memory.py", "agents/movement.py",
                                     "agents/planning.py", "agents/actions.py", "core/world_spatial.py",
                                     "core/resources.py", "core/settlements.py", "core/world_paleo.py",
-                                    "core/world_views.py", "datagen/cli_guard.py"])
+                                    "core/world_views.py", "core/world_jepa.py",
+                                    "datagen/cli_guard.py"])
 def test_no_print_calls_in_simulation_modules(module: str) -> None:
     """Simulation modules log instead of printing.
 

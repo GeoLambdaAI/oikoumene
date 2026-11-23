@@ -12,7 +12,7 @@ import json
 import logging
 
 import numpy as np
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date
 from typing import Optional
 
@@ -203,9 +203,6 @@ class ScenarioLoader:
         # Sample agent locations weighted by population
         rows, cols = pop_grid.shape
         indices = world.rng.choice(len(pop_flat), size=n_agents, p=prob)
-
-        # Build country lookup: iso3 -> country_data
-        country_lookup = {c["iso3"]: c for c in countries}
 
         for idx in indices:
             r, c = divmod(idx, cols)

@@ -29,6 +29,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `generate_earth_data` (→ `earth_climate`, `earth_resources`). `World`,
   `Agent`, `LLMModule` and `GeopoliticalSystem` gain their methods through
   mixins; class, function and config names are unchanged.
+- `World`'s JEPA backend swap moved out of the views mixin: `set_jepa_backend`,
+  `JEPA_PRESETS`, `_JEPA_SEED_OFFSET` and `_torch_available` now live in
+  `core/world_jepa.py` (`JepaBackendMixin`); `ViewsMixin` keeps only read-only
+  methods.
+
+### Changed — lint cleanup (no behaviour change)
+
+- Ruff configured in `pyproject.toml` (`[tool.ruff]`: line length 120, rules
+  E, W, F; per-file E402 ignore for `web/app.py`, whose imports must follow
+  `eventlet.monkey_patch()`), and `ruff check src app.py` runs in CI.
+- All 80 findings in `src/` and `app.py` fixed: unused imports and locals
+  removed (calls with side effects kept), placeholder-less f-strings made
+  plain, long message/prompt lines split by implicit concatenation (strings
+  byte-identical, checked by AST comparison), semicolon statements split, two
+  `lambda` assignments turned into `def`.
+
+### Removed
+
+- Dead code with no documented behaviour: `AgentMemory.get_best_strategy` and
+  `ResourceMap.to_grid_data`.
 
 ### Added
 
@@ -57,6 +77,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
+- README header attribution updated (models used, spec-driven development,
+  verification by test suite and trajectory fingerprint).
+- `generate_empirical_inputs.py`: the outputs are loaded by
+  `core/empirical_ingest.py`, not `world.py`.
 - README, HowTo and CONTRIBUTING document `--force` and `--output-dir`; README,
   HowTo, CONTRIBUTING and SECURITY use `127.0.0.1` and the port-derived CORS
   default.

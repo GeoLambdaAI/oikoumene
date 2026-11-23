@@ -18,12 +18,11 @@ Designed for:
 
 import csv
 import json
-import os
 import time
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Any
+from typing import Optional
 
 import numpy as np
 
@@ -317,7 +316,8 @@ class SimulationLogger:
             for a in alive:
                 act = a.current_action
                 actions[act] = actions.get(act, 0) + 1
-            pct = lambda act: round(actions.get(act, 0) / n_alive * 100, 1)
+            def pct(act):
+                return round(actions.get(act, 0) / n_alive * 100, 1)
 
             # Spatial spread
             lat_mean = float(np.mean(lats))
@@ -329,7 +329,8 @@ class SimulationLogger:
             avg_energy = avg_health = avg_wealth = avg_happiness = avg_age = 0
             median_wealth = std_wealth = wealth_gini = 0
             avg_intel = avg_coop = avg_ambition = avg_curiosity = 0
-            pct = lambda act: 0
+            def pct(act):
+                return 0
             lat_mean = lng_mean = spread = 0
             max_gen = 0
 

@@ -25,7 +25,7 @@ import json
 import re
 import time
 from dataclasses import dataclass, field
-from typing import Optional, Any
+from typing import Optional
 
 from oikoumene.llm.generation import GenerationMixin
 from oikoumene.llm.url_safety import validate_base_url

@@ -12,8 +12,9 @@ Manages:
 
 This module holds World's constructor, initial spawn and tick loop. The rest of
 World comes from mixins: spatial indexing (world_spatial), businesses and
-settlements (settlements), paleo-era migration and ice ages (world_paleo), and
-UI state plus the JEPA backend swap (world_views). ResourceMap lives in resources.
+settlements (settlements), paleo-era migration and ice ages (world_paleo),
+read-only UI state (world_views) and the runtime JEPA backend swap (world_jepa).
+ResourceMap lives in resources.
 """
 
 import logging
@@ -21,22 +22,22 @@ import logging
 import numpy as np
 from typing import Optional
 from oikoumene.agents.agents import Agent
-from oikoumene.core.earth import (classify_terrain, get_fertility, is_land,
-                   find_land_spawn_points, generate_earth_grid)
+from oikoumene.core.earth import (find_land_spawn_points, generate_earth_grid)
 from oikoumene.macro.macro import MacroModel
 from oikoumene.society.geopolitics import GeopoliticalSystem
 from oikoumene.core.bridge import MacroAgentBridge
-from oikoumene.core.history import HistoricalSimulation, get_era, get_spawn_locations
+from oikoumene.core.history import HistoricalSimulation, get_spawn_locations
 from oikoumene.llm.llm_module import LLMModule, LLMConfig
 from oikoumene.core.god_mode import GodMode, GodModeConfig
-from oikoumene.core.scenarios import SCENARIOS, ScenarioLoader, ScenarioConfig
+from oikoumene.core.scenarios import SCENARIOS, ScenarioLoader
 from oikoumene.worldmodel.shared_world_model import SharedWorldModel
 from oikoumene.core.sim_logger import SimulationLogger, LoggerConfig
 from oikoumene.core.resources import ResourceMap
 from oikoumene.core.settlements import Business, Settlement, SettlementsMixin
 from oikoumene.core.world_paleo import PaleoMixin
 from oikoumene.core.world_spatial import SpatialMixin
-from oikoumene.core.world_views import _JEPA_SEED_OFFSET, ViewsMixin
+from oikoumene.core.world_jepa import _JEPA_SEED_OFFSET, JepaBackendMixin
+from oikoumene.core.world_views import ViewsMixin
 
 log = logging.getLogger(__name__)
 
@@ -61,7 +62,7 @@ _STEERING_RNG_OFFSET = 104_729
 # World Engine
 # ============================================================================
 
-class World(SpatialMixin, SettlementsMixin, PaleoMixin, ViewsMixin):
+class World(SpatialMixin, SettlementsMixin, PaleoMixin, ViewsMixin, JepaBackendMixin):
     """
     Earth simulation managing terrain, agents, resources, businesses,
     and settlements using real-world coordinates. Planet-agnostic by
@@ -371,7 +372,7 @@ class World(SpatialMixin, SettlementsMixin, PaleoMixin, ViewsMixin):
             self.recent_dialogues = self.recent_dialogues[-50:]
 
         # ---- Advance historical timeline ----
-        history_result = self.history.advance_time(1)
+        self.history.advance_time(1)
         current_era = self.history.get_current_era()
 
         # Set era time scale so agents can scale their movement

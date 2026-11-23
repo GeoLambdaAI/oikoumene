@@ -436,23 +436,29 @@ class TorchJEPAWorldModel:
 
         with torch.no_grad():
             enc = self.encoder
-            enc.lin1.weight.copy_(t(ep["W1"]).T); enc.lin1.bias.copy_(t(ep["b1"]))
+            enc.lin1.weight.copy_(t(ep["W1"]).T)
+            enc.lin1.bias.copy_(t(ep["b1"]))
             enc.norm1.gamma.copy_(t(ep["g1"]))
-            enc.lin2.weight.copy_(t(ep["W2"]).T); enc.lin2.bias.copy_(t(ep["b2"]))
+            enc.lin2.weight.copy_(t(ep["W2"]).T)
+            enc.lin2.bias.copy_(t(ep["b2"]))
             enc.norm2.gamma.copy_(t(ep["g2"]))
-            enc.lin3.weight.copy_(t(ep["W3"]).T); enc.lin3.bias.copy_(t(ep["b3"]))
+            enc.lin3.weight.copy_(t(ep["W3"]).T)
+            enc.lin3.bias.copy_(t(ep["b3"]))
             enc.norm_out.gamma.copy_(t(ep["g_out"]))
 
             pred = self.predictor
-            pred.lin_lat.weight.copy_(t(pp["W_lat"]).T); pred.lin_lat.bias.copy_(t(pp["b_lat"]))
+            pred.lin_lat.weight.copy_(t(pp["W_lat"]).T)
+            pred.lin_lat.bias.copy_(t(pp["b_lat"]))
             pred.adaln1.norm.gamma.copy_(t(pp["g1"]))
             pred.adaln1.scale.weight.copy_(t(pp["W_a1_s"]).T)
             pred.adaln1.shift.weight.copy_(t(pp["W_a1_b"]).T)
-            pred.lin_hid.weight.copy_(t(pp["W_hid"]).T); pred.lin_hid.bias.copy_(t(pp["b_hid"]))
+            pred.lin_hid.weight.copy_(t(pp["W_hid"]).T)
+            pred.lin_hid.bias.copy_(t(pp["b_hid"]))
             pred.adaln2.norm.gamma.copy_(t(pp["g2"]))
             pred.adaln2.scale.weight.copy_(t(pp["W_a2_s"]).T)
             pred.adaln2.shift.weight.copy_(t(pp["W_a2_b"]).T)
-            pred.lin_out.weight.copy_(t(pp["W_out"]).T); pred.lin_out.bias.copy_(t(pp["b_out"]))
+            pred.lin_out.weight.copy_(t(pp["W_out"]).T)
+            pred.lin_out.bias.copy_(t(pp["b_out"]))
             pred.norm_out.gamma.copy_(t(pp["g_out"]))
 
     def export_numpy_params(self) -> dict:

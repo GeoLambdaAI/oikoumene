@@ -23,7 +23,6 @@ Architecture: LeWorldModel (Maes et al. 2026, arXiv:2603.19312).
 """
 
 import numpy as np
-from typing import Optional
 
 from oikoumene.worldmodel.world_model import JEPAWorldModel
 

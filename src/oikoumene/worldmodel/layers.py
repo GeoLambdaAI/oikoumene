@@ -67,7 +67,6 @@ def rms_norm_backward(dy, cache):
     => dL/dx = (gamma * dy - x * mean(gamma * x * dy, axis=-1, keepdims=True) / r^2) / r
     """
     x, gamma, r = cache
-    D = x.shape[-1]
     g_dy = gamma * dy  # (..., D)
     s = np.mean(g_dy * x, axis=-1, keepdims=True)  # (..., 1)
     dx = (g_dy - x * s / (r**2)) / r
@@ -174,7 +173,6 @@ def sigreg_backward(cache):
     # This is the standard "layer norm" backward pattern (along batch axis).
 
     # Skew loss
-    coef_skew = 2.0 / K * (Pn**3).mean(axis=0)  # dL/dskew_k * skew_k weighting
     # Actually: L_s = (1/K) sum_k skew_k^2. dL_s/dskew_k = 2*skew_k/K
     # skew_k = mean_j Pn_jk^3 => dskew_k/dPn_jk = 3 * Pn_jk^2 / B
     skew_k = (Pn**3).mean(axis=0)  # (K,)

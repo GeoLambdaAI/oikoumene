@@ -206,7 +206,6 @@ class GenerationMixin:
         name = agent.name
         energy = agent.energy
         wealth = agent.wealth
-        action = getattr(agent, 'current_action', 'idle')
         goal = getattr(agent, 'current_goal', 'survive')
 
         # Dominant trait determines personality
@@ -243,9 +242,11 @@ class GenerationMixin:
         # Questions about state
         elif any(w in msg_lower for w in ["how are", "how do you", "feeling", "okay"]):
             if energy < 30:
-                responses.append(f"Honestly? I'm struggling. Energy is low ({energy:.0f}), and food is scarce around here.")
+                responses.append(f"Honestly? I'm struggling. Energy is low ({energy:.0f}), "
+                                 "and food is scarce around here.")
             elif wealth > 50:
-                responses.append(f"Doing well, actually! Business is good (wealth: {wealth:.0f}). Life could be worse.")
+                responses.append(f"Doing well, actually! Business is good (wealth: {wealth:.0f}). "
+                                 "Life could be worse.")
             elif traits.get("resilience", 0.5) > 0.7:
                 responses.append(f"I endure. That's what I do. Currently focused on {goal}.")
             else:
@@ -254,46 +255,51 @@ class GenerationMixin:
         # Food / resources
         elif any(w in msg_lower for w in ["food", "eat", "hungry", "resource"]):
             if energy < 40:
-                responses.append(f"Food is exactly what I need! My energy is only {energy:.0f}. Do you know where to find some?")
+                responses.append(f"Food is exactly what I need! My energy is only {energy:.0f}. "
+                                 "Do you know where to find some?")
             else:
-                responses.append(f"I have enough for now. The land here provides, though it's getting harder each season.")
+                responses.append("I have enough for now. The land here provides, "
+                                 "though it's getting harder each season.")
 
         # Trade / wealth
         elif any(w in msg_lower for w in ["trade", "buy", "sell", "wealth", "money"]):
             if traits.get("ambition", 0.5) > 0.6:
                 responses.append(f"Now you're speaking my language! I have {wealth:.0f} wealth. What do you offer?")
             else:
-                responses.append(f"I'm not much of a trader. I prefer simpler things.")
+                responses.append("I'm not much of a trader. I prefer simpler things.")
 
         # Exploration / travel
         elif any(w in msg_lower for w in ["explore", "travel", "move", "north", "south", "east", "west", "go"]):
             if traits.get("curiosity", 0.5) > 0.6:
-                responses.append(f"I love exploring! I've been wanting to see what lies beyond these lands.")
+                responses.append("I love exploring! I've been wanting to see what lies beyond these lands.")
                 return {"text": responses[0], "tone": "curious", "goal_change": "explore"}
             else:
-                responses.append(f"Travel? Too risky for my taste. I'd rather stay where I know the terrain.")
+                responses.append("Travel? Too risky for my taste. I'd rather stay where I know the terrain.")
 
         # Danger / conflict
         elif any(w in msg_lower for w in ["danger", "war", "fight", "attack", "conflict", "flee"]):
             if traits.get("risk_tolerance", 0.5) > 0.7:
-                responses.append(f"Danger? I laugh at danger. Let them come!")
+                responses.append("Danger? I laugh at danger. Let them come!")
             elif traits.get("cooperation", 0.5) > 0.7:
-                responses.append(f"We should work together for safety. Alone we fall, together we stand.")
+                responses.append("We should work together for safety. Alone we fall, together we stand.")
             else:
-                responses.append(f"That's... concerning. Maybe I should think about moving somewhere safer.")
+                responses.append("That's... concerning. Maybe I should think about moving somewhere safer.")
                 return {"text": responses[0], "tone": "fearful", "goal_change": "migrate"}
 
         # Default: personality-driven
         else:
             personality_responses = {
-                "intelligence": f"Hmm, interesting point. Let me think about that... My analysis suggests we need to focus on {goal}.",
-                "creativity": f"Oh! That gives me an idea. What if we approached {goal} from a completely different angle?",
-                "sociability": f"That's a great conversation topic! You know, I was just telling my neighbor about something similar.",
+                "intelligence": ("Hmm, interesting point. Let me think about that... "
+                                 f"My analysis suggests we need to focus on {goal}."),
+                "creativity": f"Oh! That gives me an idea. What if we approached {goal} from a completely different "
+                              "angle?",
+                "sociability": ("That's a great conversation topic! "
+                                "You know, I was just telling my neighbor about something similar."),
                 "ambition": f"I appreciate the thought, but I'm focused on bigger things. My current goal: {goal}.",
-                "risk_tolerance": f"Ha! I've heard bolder claims. But sure, I'm always up for something new.",
-                "cooperation": f"I think we can find common ground here. Let's work on this together.",
+                "risk_tolerance": "Ha! I've heard bolder claims. But sure, I'm always up for something new.",
+                "cooperation": "I think we can find common ground here. Let's work on this together.",
                 "resilience": f"I've seen worse times. Whatever happens, I'll adapt. Right now I'm working on {goal}.",
-                "curiosity": f"Tell me more! I want to understand everything about this. What else do you know?",
+                "curiosity": "Tell me more! I want to understand everything about this. What else do you know?",
             }
             responses.append(personality_responses.get(dominant,
                 f"I hear you. I'm currently focused on {goal}, but I'm listening."))

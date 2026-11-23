@@ -37,7 +37,6 @@ Key scientific references:
 
 import numpy as np
 from dataclasses import dataclass, field
-from typing import Optional
 
 from oikoumene.core.paleoclimate import PaleoclimateModel
 from oikoumene.society.technology import TECH_TREE, EvolutionModel, GeographicAdvantage
@@ -271,7 +270,6 @@ class HistoricalSimulation:
         self.rng = rng
 
         # Initialize with era-appropriate starting techs
-        era = get_era(start_year_bp)
         for tech in TECH_TREE:
             if tech.year_bp_available >= start_year_bp and not tech.prerequisites:
                 self.discovered_techs.add(tech.name)

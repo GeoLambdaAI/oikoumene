@@ -20,7 +20,7 @@ import secrets
 import time
 from collections.abc import Mapping
 
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify
 from flask_socketio import SocketIO
 
 from oikoumene.core.world import World
@@ -284,7 +284,7 @@ def get_god_log():
 @app.route("/api/jepa/status")
 def get_jepa_status():
     if world is None:
-        from oikoumene.core.world_views import _torch_available
+        from oikoumene.core.world_jepa import _torch_available
         return jsonify({"backend": "numpy", "preset": "default",
                         "torch_available": _torch_available()})
     return jsonify(world.get_jepa_status())

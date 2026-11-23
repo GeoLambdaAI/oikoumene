@@ -22,8 +22,7 @@ from oikoumene.core.earth import TerrainType
 
 if TYPE_CHECKING:
     from oikoumene.macro.macro import MacroState
-    from oikoumene.core.world import ResourceMap, Settlement, Business
-    from oikoumene.agents.agents import Agent
+    from oikoumene.core.world import ResourceMap
 
 
 # Per-terrain food-regeneration factors. MUST stay in sync with
@@ -189,9 +188,7 @@ class MacroAgentBridge:
         pollution = macro_state.persistent_pollution
         slr = macro_state.sea_level_rise_m
         freshwater = macro_state.freshwater_stress
-        fossil_remaining = macro_state.fossil_fuels
         mineral_remaining = macro_state.minerals_global
-        tech = macro_state.technology_level
 
         # Snapshot the per-cell regen baselines once (FIX B1 + food_regen).
         # Without this, the per-cell `*= water_factor` and `*= mineral_remaining`

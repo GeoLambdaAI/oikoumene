@@ -22,7 +22,6 @@ from oikoumene.society.interactions import InteractionsMixin
 
 if TYPE_CHECKING:
     from oikoumene.macro.macro import MacroState
-    from oikoumene.core.world import Settlement
 
 
 @dataclass
@@ -297,7 +296,8 @@ class GeopoliticalSystem(InteractionsMixin):
         euclidean to within ~1%.
         """
         # haversine formula in radians
-        phi1 = np.radians(lat1); phi2 = np.radians(lat2)
+        phi1 = np.radians(lat1)
+        phi2 = np.radians(lat2)
         dphi = np.radians(lat2 - lat1)
         dlmb = np.radians(lng2 - lng1)
         a = np.sin(dphi/2)**2 + np.cos(phi1)*np.cos(phi2)*np.sin(dlmb/2)**2

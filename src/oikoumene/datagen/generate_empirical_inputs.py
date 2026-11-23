@@ -43,7 +43,8 @@ documentation on 2026-05-25 / 2026-06-21:
   - Natural Earth CDN at https://naciscdn.org/naturalearth/
 
 Output goes under data/empirical/ so it coexists with the synthesized
-data/earth_*.npy rasters; world.py chooses which to load.
+data/earth_*.npy rasters. The simulator loads these outputs at runtime through
+oikoumene.core.empirical_ingest.
 
 Optional dependencies: rasterio>=1.3 + pyproj>=3.6 — declared as the
 [data] extra. CHELSA and SoilGrids are read via GDAL's /vsicurl/ at the
@@ -62,7 +63,6 @@ Run once:
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 import zipfile
 from pathlib import Path

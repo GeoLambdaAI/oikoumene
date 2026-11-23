@@ -81,14 +81,27 @@
             height: 32px;
             align-items: center;
             overflow-x: auto;
+            overflow-y: hidden;
+            scrollbar-width: thin;
+            flex-wrap: nowrap;
             z-index: 1000;
             position: relative;
         }
-        .stat { display: flex; gap: 4px; white-space: nowrap; }
+        .stat { display: flex; gap: 4px; white-space: nowrap; flex-shrink: 0; }
         .stat-label { color: #6b7280; }
         .stat-value { color: #f9fafb; font-weight: 600; }
         .stat-value.good { color: #4ade80; }
         .stat-value.warn { color: #fbbf24; }
+        /* Fixed value slots: tabular digits, right-aligned, sized for the largest realistic value.
+           Selected by id because updateStats() reassigns className on s-temp and s-tension. */
+        #statsbar .stat-value { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+        #s-tick, #s-born, #s-wealth { min-width: 6ch; }
+        #s-pop, #s-energy, #s-happy, #s-temp { min-width: 5ch; }
+        #s-gen, #s-biz, #s-sett, #s-co2, #s-tension { min-width: 4ch; }
+        #s-nations { min-width: 3ch; }
+        #s-techs { min-width: 2ch; }
+        #s-year { min-width: 10ch; }
+        #statsbar #s-era { min-width: 120px; text-align: left; }
 
         /* Main Layout */
         #main {
@@ -281,7 +294,7 @@
     <div class="stat"><span class="stat-label">Max Gen:</span><span class="stat-value warn" id="s-gen">0</span></div>
     <div class="stat"><span class="stat-label">Businesses:</span><span class="stat-value" id="s-biz">0</span></div>
     <div class="stat"><span class="stat-label">Settlements:</span><span class="stat-value" id="s-sett">0</span></div>
-    <div class="stat" style="border-left:1px solid #374151;padding-left:12px"><span class="stat-label">Year:</span><span class="stat-value warn" id="s-year" style="min-width:80px">68,000 BCE</span></div>
+    <div class="stat" style="border-left:1px solid #374151;padding-left:12px"><span class="stat-label">Year:</span><span class="stat-value warn" id="s-year">68,000 BCE</span></div>
     <div class="stat"><span class="stat-label">Era:</span><span class="stat-value" id="s-era" style="color:#c084fc;max-width:120px;overflow:hidden;text-overflow:ellipsis">Out of Africa</span></div>
     <div class="stat"><span class="stat-label">CO2:</span><span class="stat-value" id="s-co2">200</span></div>
     <div class="stat"><span class="stat-label">Temp:</span><span class="stat-value" id="s-temp">-6.0C</span></div>

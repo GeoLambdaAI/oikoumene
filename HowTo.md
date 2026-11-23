@@ -74,9 +74,17 @@ pip install -e .
 ```
 ---
 
-## 3. Generate the Earth data
+## 3. Generate the Earth data (optional)
 
-A **one-time** step. Run all three scripts from the repository root:
+The data files ship with the repository in [`data/`](data/), so this step is optional.
+Regenerating **overwrites the committed files in `data/`**, which are the reference for all published
+results (their SHA-256 is pinned in `tests/test_data_integrity.py`). With current library versions the
+regenerated `earth_*.npy` float grids differ from the committed ones only by floating-point rounding
+(1–2 ULP in 0.1–3 % of cells; biomes and terrain are identical), but even that changes simulation
+results: the trained JEPA weights differ in every fingerprint run and a 1000-tick historical run
+diverges from tick 991. `generate_present_day_data` fetches live data, so its output depends on the upstream sources on the day.
+
+To regenerate anyway, run the three scripts from the repository root:
 
 ```bash
 python -m oikoumene.datagen.generate_landmask          # ~10s  — rasterises Natural Earth coastlines to 0.25°

@@ -55,7 +55,7 @@ Each agent's movement bias and action intensity come from a cross-entropy-method
 > 
 > **Tested on:**
 > - Ubuntu 22.04 ARM, Python 3.11.
-> - macOS: requires Python 3.11+ (e.g. `conda create -n oikoumene python=3.11` or `python3.11 -m venv .venv`); Python 3.9 from miniconda base will fail due to eventlet/kqueue incompatibility. Disable AirPlay Receiver or change port from 5000 to 5001 in `app.py`.
+> - macOS: requires Python 3.11+ (e.g. `conda create -n oikoumene python=3.11` or `python3.11 -m venv .venv`); Python 3.9 from miniconda base will fail due to eventlet/kqueue incompatibility. Disable AirPlay Receiver or use another port: `PORT=5001 CORS_ALLOWED_ORIGINS=http://localhost:5001,http://127.0.0.1:5001 python app.py`.
 > 
 > - Windows: untested, please file issues.
 
@@ -147,7 +147,15 @@ pip install -r requirements.txt
 pip install -e .
 ```
 
-### Generate Earth Data (one-time)
+### Generate Earth Data (optional)
+
+The data files ship with the repository in `data/`, so this step is optional.
+Regenerating **overwrites the committed files in `data/`**, which are the reference for all published
+results (their SHA-256 is pinned in `tests/test_data_integrity.py`). With current library versions the
+regenerated `earth_*.npy` float grids differ from the committed ones only by floating-point rounding
+(1–2 ULP in 0.1–3 % of cells; biomes and terrain are identical), but even that changes simulation
+results: the trained JEPA weights differ in every fingerprint run and a 1000-tick historical run
+diverges from tick 991. `generate_present_day_data` fetches live data, so its output depends on the upstream sources on the day.
 
 ```bash
 python -m oikoumene.datagen.generate_landmask         # ~10s — rasterizes Natural Earth coastlines
@@ -215,7 +223,7 @@ Each agent perceives the world through a **Joint Embedding Predictive Architectu
   *Representation Learning for Spatiotemporal Physical Systems*. arXiv:2603.13227.
   — Linear probing of latent embeddings to test if physical parameters are captured.
 
-**Implementation** (`world_model.py`, `shared_world_model.py`):
+**Implementation** (`world_model.py`, `layers.py`, `shared_world_model.py`):
 
 | Component | Architecture | Reference |
 |-----------|-------------|-----------|
@@ -234,7 +242,7 @@ L = ||z_hat_{t+1} - z_{t+1}||^2 + lambda * SIGReg(Z)
 where `z_hat_{t+1} = Predictor(Encoder(x_t), a_t)` and `z_{t+1} = Encoder(x_{t+1})`.
 
 **Backends (NumPy default, PyTorch optional).** The reference implementation in
-`world_model.py` is pure NumPy with hand-written, gradient-checked backprop. An
+`world_model.py` (with `layers.py`) is pure NumPy with hand-written, gradient-checked backprop. An
 opt-in PyTorch backend (`world_model_torch.py`) implements the identical
 architecture with autograd and optional CUDA. At its default settings it
 reproduces the NumPy model — weights copied across backends match encode/predict
@@ -364,7 +372,7 @@ The simulation runs on our planet's surface derived from multiple datasets.
 - Climate zones classified via **Whittaker biome diagram** (Whittaker 1975):
   temperature x precipitation → 12 biome types.
 
-**Climate model components** (in `generate_earth_data.py`):
+**Climate model components** (in `datagen/earth_climate.py` and `datagen/earth_resources.py`):
 
 | Layer | Method | References |
 |-------|--------|-----------|
@@ -415,7 +423,7 @@ and technology diffusion rates based on their geographic location.
 - Diamond, J. (1997). *Guns, Germs, and Steel: The Fates of Human Societies*.
   W. W. Norton.
 
-**Implementation** (`history.py: GeographicAdvantage`):
+**Implementation** (`society/technology.py: GeographicAdvantage`):
 
 | Factor | Eurasia | Africa | Americas | Source |
 |--------|---------|--------|----------|--------|
@@ -449,33 +457,51 @@ Module paths are relative to `src/oikoumene/`; tests live in `tests/`.
 
 ### Core Simulation
 
-| Module | Lines | Purpose |
-|--------|-------|---------|
-| `agents/agents.py` | 1,208 | Autonomous agents: JEPA planning, physics, traits, skills, memory, social actions |
-| `core/world.py` | 1,189 | World engine: tick loop, resources, businesses, settlements, scenario dispatch, era-aware UI summaries, runtime JEPA backend swap |
-| `worldmodel/world_model.py` | 701 | JEPA implementation (NumPy, hand-written backprop): encoder, predictor (AdaLN), SIGReg, CEM planner, deterministic batch sampling |
-| `worldmodel/world_model_torch.py` | 534 | Optional PyTorch JEPA backend (autograd): same architecture, CUDA-ready, Epps–Pulley SIGReg toggle, NumPy weight bridge |
-| `worldmodel/shared_world_model.py` | 263 | Single shared JEPA for all agents with batch encode/plan; selects NumPy or PyTorch backend |
-| `macro/macro.py` | 512 | 14-state ODE: climate, resources, pollution, socioeconomics |
-| `society/geopolitics.py` | 705 | Emergent nations, alliances, trade (gravity model), conflict (IFs) |
-| `core/bridge.py` | 456 | Bidirectional coupling: agents <-> macro <-> geopolitics; per-cell regen baselines |
-| `core/history.py` | 849 | 70,000-year timeline: paleoclimate, migration, Diamond, Dawkins |
+| Module | Purpose |
+|--------|---------|
+| `agents/agents.py` | `Agent`: autonomous agent state, lifecycle update, relationships, dialogue, serialisation |
+| `agents/traits.py` | `TraitType` and `generate_traits`: heritable traits via crossover + mutation |
+| `agents/memory.py` | `AgentMemory` (episodes, facts, strategies) and `SkillSet` (practice, inheritance) |
+| `agents/movement.py` | `MovementMixin` for `Agent`: physics, goal movement, wandering, separation, resource search |
+| `agents/planning.py` | `PlanningMixin` for `Agent`: observation, needs and goal selection, JEPA planning, action decoding |
+| `agents/actions.py` | `ActionsMixin` for `Agent`: action execution (eat, work, trade, build, socialize, reproduce, explore, research, heal, govern, migrate) |
+| `core/world.py` | `World` engine: tick loop, initial spawn, scenario dispatch, ablation actions |
+| `core/world_spatial.py` | `SpatialMixin` for `World`: spatial grid, neighbour queries, harvesting, distances |
+| `core/resources.py` | `ResourceMap`: per-cell resources, harvesting, regeneration |
+| `core/settlements.py` | `Business`, `Settlement` and `SettlementsMixin` for `World`: businesses, nearest settlement, settlement formation |
+| `core/world_paleo.py` | `PaleoMixin` for `World`: migration frontier, ice-age effects, paleo-to-macro handoff |
+| `core/world_views.py` | `ViewsMixin` for `World`: era-aware UI summaries, full state, runtime JEPA backend swap |
+| `worldmodel/world_model.py` | JEPA implementation (NumPy, hand-written backprop): encoder, predictor (AdaLN), SIGReg loss, CEM planner, deterministic batch sampling |
+| `worldmodel/layers.py` | NumPy layer primitives with forward and backward passes (linear, GELU, RMSNorm, AdaLN, SIGReg) and Adam |
+| `worldmodel/world_model_torch.py` | Optional PyTorch JEPA backend (autograd): same architecture, CUDA-ready, Epps–Pulley SIGReg toggle, NumPy weight bridge |
+| `worldmodel/shared_world_model.py` | Single shared JEPA for all agents with batch encode/plan; selects NumPy or PyTorch backend |
+| `macro/macro.py` | 14-state ODE: climate, resources, pollution, socioeconomics |
+| `society/geopolitics.py` | `NationState` and `GeopoliticalSystem`: emergent nations, nation statistics, summaries |
+| `society/interactions.py` | `InteractionsMixin` for `GeopoliticalSystem`: relations, trade (gravity model), conflict (IFs), negotiations, technology diffusion |
+| `society/technology.py` | Tech tree, geographic advantage (Diamond), evolution model (Dawkins) |
+| `core/bridge.py` | Bidirectional coupling: agents <-> macro <-> geopolitics; per-cell regen baselines |
+| `core/history.py` | 70,000-year timeline: eras, migration waves, spawn locations, `HistoricalSimulation` |
+| `core/paleoclimate.py` | `PaleoclimateModel`: CO₂, temperature and sea level over time, ice mask, land bridges |
 
 ### Extensions
 
-| Module | Lines | Purpose |
-|--------|-------|---------|
-| `llm/llm_module.py` | 713 | LLM social cognition (Ollama/OpenAI): trade negotiation, governance speech, social dialogue |
-| `core/god_mode.py` | 450 | Interventional experiments: whisper, commandment, drought, plague, climate nudge |
-| `core/scenarios.py` | 334 | Scenario A (historical) and B (present-day) configuration |
-| `core/earth.py` | 478 | Real geography: Natural Earth land mask, Whittaker biomes, resource lookup |
+| Module | Purpose |
+|--------|---------|
+| `llm/llm_module.py` | `LLMConfig`, provider presets and `LLMModule`: LLM client (Ollama/OpenAI), rate limiting, response parsing, connection test |
+| `llm/generation.py` | `GenerationMixin` for `LLMModule`: trade negotiation, governance speech, social dialogue, teaching, chat, fallbacks |
+| `llm/url_safety.py` | `validate_base_url`: SSRF guard and host allowlist |
+| `core/god_mode.py` | Interventional experiments: whisper, commandment, drought, plague, climate nudge |
+| `core/scenarios.py` | Scenario A (historical) and B (present-day) configuration |
+| `core/earth.py` | Real geography: Natural Earth land mask, Whittaker biomes, resource lookup |
 
-### Data Generation (run once)
+### Data Generation (optional; outputs ship in `data/`)
 
 | Script | Purpose |
 |--------|---------|
 | `datagen/generate_landmask.py` | Rasterize Natural Earth 110m polygons to 0.25° land mask |
 | `datagen/generate_earth_data.py` | Compute 9 Earth system grids at 0.5° (temp, precip, biome, fertility, minerals, freshwater, fossil) |
+| `datagen/earth_climate.py` | Grid constants, biome IDs, elevation, temperature, precipitation and biome models used by `generate_earth_data` |
+| `datagen/earth_resources.py` | Fertility, mineral, freshwater and fossil-fuel models used by `generate_earth_data` |
 | `datagen/generate_present_day_data.py` | Fetch World Bank API + NOAA + NASA data for Scenario B |
 
 ### Performance Building Blocks

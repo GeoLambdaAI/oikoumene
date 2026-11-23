@@ -196,6 +196,11 @@ def test_heldout_probe_detects_overfitting() -> None:
                                     "core/resources.py", "core/settlements.py", "core/world_paleo.py",
                                     "core/world_views.py"])
 def test_no_print_calls_in_simulation_modules(module: str) -> None:
+    """Simulation modules log instead of printing.
+
+    Exception: the ``datagen/`` generators are command-line scripts whose progress
+    output is ``print`` by design, so they are deliberately not in this list.
+    """
     tree = ast.parse((PKG / module).read_text())
     prints = [n.lineno for n in ast.walk(tree)
               if isinstance(n, ast.Call) and getattr(n.func, "id", None) == "print"]

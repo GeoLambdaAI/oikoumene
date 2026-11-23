@@ -28,10 +28,12 @@ pip install -e .
 # Dev tools (optional but recommended)
 pip install -e ".[dev]"
 
-# Pre-compute Earth data (one-time, ~30s total; needs internet for present-day)
-python -m oikoumene.datagen.generate_landmask
-python -m oikoumene.datagen.generate_earth_data
-python -m oikoumene.datagen.generate_present_day_data
+# Earth data ships in data/ — do not regenerate it for normal development.
+# Regenerating overwrites the reference files, changes simulation results and
+# fails tests/test_data_integrity.py (see README, "Generate Earth Data").
+#   python -m oikoumene.datagen.generate_landmask
+#   python -m oikoumene.datagen.generate_earth_data
+#   python -m oikoumene.datagen.generate_present_day_data
 
 # Run the simulation
 export FLASK_SECRET_KEY=$(python -c "import secrets; print(secrets.token_hex(32))")

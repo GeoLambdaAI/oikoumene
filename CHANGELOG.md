@@ -21,6 +21,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A per-tick trajectory fingerprint (`scripts/fingerprint.py`,
   `tests/test_fingerprint.py`) pins the simulation bit for bit across the move.
 - Logger names follow the new module paths (e.g. `oikoumene.core.world`).
+- Large modules split by moving code unchanged: `world_model` (→ `layers`),
+  `history` (→ `paleoclimate`, `technology`), `llm_module` (→ `url_safety`,
+  `generation`), `geopolitics` (→ `interactions`), `agents` (→ `traits`,
+  `memory`, `movement`, `planning`, `actions`), `world` (→ `world_spatial`,
+  `resources`, `settlements`, `world_paleo`, `world_views`) and
+  `generate_earth_data` (→ `earth_climate`, `earth_resources`). `World`,
+  `Agent`, `LLMModule` and `GeopoliticalSystem` gain their methods through
+  mixins; class, function and config names are unchanged.
+
+### Added
+
+- `tests/test_data_integrity.py` pins the SHA-256 of the nine committed
+  `data/earth_*.npy` reference grids.
+
+### Documentation
+
+- README and HowTo: generating the data is optional (the files ship in
+  `data/`); regenerating overwrites the reference files and changes simulation
+  results. README module table updated for the split modules; its line-count
+  column was dropped.
 
 ## [0.4.0] - 2026-11-21
 

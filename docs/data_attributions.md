@@ -170,7 +170,7 @@ the synthetic layers:
   Members (2004) for the longer temperature/δD context.
 - **Source:** PANGAEA / NOAA Paleoclimatology archives.
 - **Licence:** Open scientific data; cite the original papers.
-- **How it is used (important):** `history.py`'s `PALEOCLIMATE_DATA` is **not** a
+- **How it is used (important):** `core/paleoclimate.py`'s `PaleoclimateModel.PALEOCLIMATE_DATA` is **not** a
   transcription of these ice-core series. It is a small, hand-curated set of ~25
   representative anchor points (year_bp, CO₂, ΔT, sea level) *informed by* the
   above records, linearly interpolated between anchors. Treat it as a stylised

@@ -1,6 +1,13 @@
 """
 Flask + SocketIO server for Oikoumene.
 Provides real-time WebSocket updates and a zoomable world map interface.
+
+At about 680 lines this module is above the 600-line target and deliberately not
+split: every route and SocketIO handler registers on the module-level ``app`` and
+``socketio`` and shares the module's mutable simulation state (``world``,
+``sim_running``, ``sim_speed``, ``loop_generation``, ``world_lock``) through
+``global``. Splitting it would mean blueprints and a state object, i.e. a rewrite
+rather than a move.
 """
 
 import eventlet

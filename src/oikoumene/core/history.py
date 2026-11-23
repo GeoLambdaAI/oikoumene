@@ -16,6 +16,11 @@ Models:
 6. ICE AGE DYNAMICS: Glacial cycles, ice sheet extent, permafrost,
    land bridges (Beringia, Sundaland), refugia
 
+This module holds the eras, migration waves, spawn locations and
+HistoricalSimulation, which combines the parts. The paleoclimate and ice-age
+model (1, 6) lives in oikoumene.core.paleoclimate; geographic determinism, the
+technology tree and local adaptation (3, 5) live in oikoumene.society.technology.
+
 Time system: simulation year as BP (Before Present, relative to 1950 CE).
 Negative values = CE years (e.g., -74 = 2024 CE).
 

@@ -9,9 +9,12 @@ Inspired by:
 Key components:
 - WorldEncoder: 3-layer MLP with RMSNorm + GELU, maps observations to latents
 - WorldPredictor: 2-layer MLP with AdaLN action conditioning
-- SIGReg: differentiable moments-based proxy for Cramer-Wold gaussianity test
 - CEMPlanner: cross-entropy method for action selection in latent space
 - JEPAWorldModel: orchestrates training with Adam optimizer
+
+Layer primitives live in oikoumene.worldmodel.layers: forward/backward passes
+for linear, GELU, RMSNorm, AdaLN and SIGReg (differentiable moments-based proxy
+for the Cramer-Wold gaussianity test), and the Adam optimizer.
 
 Notes on the v0.2 rewrite (replacing the random-perturbation gradients of v0.1):
 - All backward passes are analytic and verified by finite-difference gradient

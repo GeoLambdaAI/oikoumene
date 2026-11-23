@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 
 
 # Per-terrain food-regeneration factors. MUST stay in sync with
-# ResourceMap.initialize_from_terrain in world.py:78-113. We mirror these
+# ResourceMap.initialize_from_terrain in core/resources.py. We mirror these
 # here (rather than copying the live food_regen array on first call) because
 # world._apply_ice_age_effects mutates food_regen multiplicatively across
 # paleo ticks (food_regen *= cold_factor), so a live snapshot taken on the

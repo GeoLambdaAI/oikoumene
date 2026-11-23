@@ -9,6 +9,11 @@ Manages:
 - Society/governance structures
 - Spatial indexing for agent interactions
 - Complete simulation tick logic
+
+This module holds World's constructor, initial spawn and tick loop. The rest of
+World comes from mixins: spatial indexing (world_spatial), businesses and
+settlements (settlements), paleo-era migration and ice ages (world_paleo), and
+UI state plus the JEPA backend swap (world_views). ResourceMap lives in resources.
 """
 
 import logging

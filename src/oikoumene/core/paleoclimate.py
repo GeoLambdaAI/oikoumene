@@ -1,6 +1,6 @@
 """
 Paleoclimate reconstruction for the historical scenario (moved from history.py):
-temperature anomaly, CO2, sea level, ice sheets and land bridges from ice core data.
+temperature anomaly, CO2, sea level and ice sheets from ice core data.
 """
 
 import numpy as np
@@ -81,17 +81,6 @@ class PaleoclimateModel:
         },
     }
 
-    # Land bridges exposed at low sea levels
-    # Ref: Marshak (2019), Voris (2000)
-    LAND_BRIDGES = [
-        {"name": "Beringia", "lat": 65, "lng": -170,
-         "threshold_m": -50, "connects": ("Asia", "Americas")},
-        {"name": "Sundaland", "lat": -2, "lng": 110,
-         "threshold_m": -40, "connects": ("Asia", "Australia_approach")},
-        {"name": "Doggerland", "lat": 54, "lng": 3,
-         "threshold_m": -30, "connects": ("Britain", "Europe")},
-    ]
-
     def __init__(self):
         # Pre-sort data by year for interpolation
         self._data = sorted(self.PALEOCLIMATE_DATA, key=lambda x: -x[0])
@@ -155,12 +144,4 @@ class PaleoclimateModel:
         if lat <= antarctic_boundary:
             return True
 
-        return False
-
-    def is_land_bridge_active(self, bridge_name: str, year_bp: float) -> bool:
-        """Check if a land bridge is exposed (sea level low enough)."""
-        climate = self.get_climate(year_bp)
-        for bridge in self.LAND_BRIDGES:
-            if bridge["name"] == bridge_name:
-                return climate["sea_level_m"] <= bridge["threshold_m"]
         return False

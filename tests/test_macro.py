@@ -202,7 +202,7 @@ def test_carbon_cycle_unit_anchor():
     dy = model._ode_system(0, y0, {})
     dco2_per_yr = dy[0]  # _IDX["co2"]
     print(f"  Modelled dCO2/dt at 2025 startwerten: {dco2_per_yr:.2f} ppm/yr")
-    print(f"  Mauna Loa 2014-2024 decadal mean:    2.4-3.0 ppm/yr")
+    print("  Mauna Loa 2014-2024 decadal mean:    2.4-3.0 ppm/yr")
     ok = 2.0 <= dco2_per_yr <= 3.5
     print(f"  {'PASS' if ok else 'FAIL'}: within 2.0-3.5 envelope")
     assert ok, f"dCO2/dt {dco2_per_yr:.2f} ppm/yr outside 2.0-3.5 envelope"

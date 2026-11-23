@@ -8,7 +8,8 @@ Verifiziert:
 4. Paleo-Verhalten ist konsistent (alles auf min 1 Tick komprimiert)
 5. Default-era_time_scale_cache funktioniert vor der ersten update()
 """
-import sys, types
+import sys
+import types
 
 # Try the real world_model first; only stub if its dependency chain isn't
 # available. Unconditionally stubbing here leaked into sibling test files
@@ -20,7 +21,9 @@ if 'oikoumene.worldmodel.world_model' not in sys.modules:
         stub = types.ModuleType('oikoumene.worldmodel.world_model')
         class _DummyJEPA:
             def __init__(self, *args, **kwargs): pass
-            def encode(self, x): import numpy as np; return np.zeros(24)
+            def encode(self, x):
+                import numpy as np
+                return np.zeros(24)
             def get_world_understanding(self): return {}
         stub.JEPAWorldModel = _DummyJEPA
         sys.modules['oikoumene.worldmodel.world_model'] = stub
@@ -79,20 +82,20 @@ def test_yrs_to_ticks_intermediate_eras():
     assert a._yrs_to_ticks(15.0) == 1
     assert a._yrs_to_ticks(60.0) == 1
     assert a._yrs_to_ticks(666.0) == 13   # round(666/50) = 13
-    print(f"  Holocene 50yr/tick: 15yr->1, 60yr->1, 666yr->13 OK")
+    print("  Holocene 50yr/tick: 15yr->1, 60yr->1, 666yr->13 OK")
 
     # Agricultural (~10 yr/tick)
     a._era_time_scale_cache = 10.0
     assert a._yrs_to_ticks(15.0) == 2  # round(15/10) = 2 (note: round uses banker's rounding so 1.5->2)
     assert a._yrs_to_ticks(60.0) == 6
     assert a._yrs_to_ticks(666.0) == 67
-    print(f"  Agricultural 10yr/tick: 15yr->2, 60yr->6, 666yr->67 OK")
+    print("  Agricultural 10yr/tick: 15yr->2, 60yr->6, 666yr->67 OK")
 
     # Historical (1 yr/tick)
     a._era_time_scale_cache = 1.0
     assert a._yrs_to_ticks(15.0) == 15
     assert a._yrs_to_ticks(60.0) == 60
-    print(f"  Historical 1yr/tick: 15yr->15, 60yr->60 OK")
+    print("  Historical 1yr/tick: 15yr->15, 60yr->60 OK")
     print("  PASS\n")
 
 

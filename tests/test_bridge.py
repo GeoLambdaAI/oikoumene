@@ -62,7 +62,8 @@ class MockWorld:
     @staticmethod
     def _distance_deg(lat1, lng1, lat2, lng2):
         # Use the same haversine-degree-equivalent formula as world.py v0.2
-        phi1 = np.radians(lat1); phi2 = np.radians(lat2)
+        phi1 = np.radians(lat1)
+        phi2 = np.radians(lat2)
         dphi = np.radians(lat2 - lat1)
         dlmb = np.radians(lng2 - lng1)
         a = np.sin(dphi/2)**2 + np.cos(phi1)*np.cos(phi2)*np.sin(dlmb/2)**2
@@ -260,7 +261,6 @@ def test_performance_apply_geopolitics():
     """
     print("Test 4: apply_geopolitics_to_agents — performance")
 
-    from oikoumene.core.bridge import MacroAgentBridge
     # Use a larger world to make the speedup visible
     settlements, nations, agents = build_realistic_world(
         n_nations=15, settlements_per_nation=10, agents_per_settlement=20, seed=42)

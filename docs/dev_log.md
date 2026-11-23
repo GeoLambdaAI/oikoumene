@@ -15,7 +15,7 @@ see [`validation.md`](validation.md). This file complements those.
 ## Arc: v0.3.0 → v0.4 scaffolding (sessions of 2026-05-23, 2026-05-25, 2026-06-21, 2026-06-22)
 
 Topic span: PyTorch JEPA backend; dashboard backend-swap knob; full
-upload-readiness audit and v0.3.0 release; empirical-data ingestion
+upload-readiness check (LLM-driven, not an independent audit) and v0.3.0 release; empirical-data ingestion
 scaffolding (CHELSA, SoilGrids, HYDE, HadCRUT5, ETOPO, UCDP-GED, NE 10 m
 rivers); Sobol sensitivity analysis. Roughly two weeks of focused work.
 

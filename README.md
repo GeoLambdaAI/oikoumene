@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <sub><em>This simulation was developed primarily with Claude Code, Anthropic's agentic CLI, using Claude Opus 4.6, Opus 4.7 and Opus 5.5. The collaboration served as a real-world stress test of successive coding models, combining extensive prompt engineering, spec-driven development and human review at key decision points. Changes are verified by a test suite and a bit-exact trajectory fingerprint.</em></sub>
+  <sub><em>This simulation was developed primarily with Claude Code, Anthropic's agentic CLI, using Claude Opus 4.6, Opus 4.7 and Opus 5.5. It began as an experiment to find out how well coding LLMs really perform on a non-trivial scientific codebase. Versions up to 0.3.x were developed iteratively through extensive prompt engineering: the author directed the work, but the generated code and documentation were not reviewed in depth. From 0.4.0, development has been spec-driven, with human review at key decision points and verification by a test suite and a bit-exact trajectory fingerprint.</em></sub>
 </p>
 
 # Oikoumene: Autonomous Agent Civilization Simulator
@@ -19,8 +19,14 @@ Each agent's movement bias and action intensity come from a cross-entropy-method
 [![Tests](https://github.com/GeoLambdaAI/oikoumene/actions/workflows/test.yml/badge.svg)](https://github.com/GeoLambdaAI/oikoumene/actions/workflows/test.yml)
 [![DOI](https://img.shields.io/badge/DOI-pending-lightgrey.svg)](https://www.geolambda.ai)
 
-> **Status:** v0.4.0 — see the `## [0.4.0]` section of
-> [CHANGELOG.md](CHANGELOG.md). v0.3.1 was a **security & correctness patch**: closed an LLM
+> **Status:** v0.5.0 — see the `## [0.5.0]` section of
+> [CHANGELOG.md](CHANGELOG.md). v0.5.0 is a **restructuring release with no change
+> to simulation behaviour** (verified by a bit-exact trajectory fingerprint): the
+> code is now an installable package under `src/oikoumene/`, so imports are
+> `oikoumene.<subpackage>.<module>` and installation needs `pip install -e .`;
+> large modules were split, the data generators refuse to overwrite the committed
+> reference data, and the server prints `127.0.0.1` with a port-aware CORS default.
+> v0.3.1 was a **security & correctness patch**: closed an LLM
 > API-key exfiltration path and DOM XSS on the web surface, added SSRF/base-URL
 > validation and input hardening, made the background tick loop reset-safe, and
 > fixed a batch of simulation-core bugs (Present-Day nations no longer
@@ -47,11 +53,23 @@ Each agent's movement bias and action intensity come from a cross-entropy-method
 >   pre-specified outcome benefit attributable to latent-space steering (see the
 >   ablation paragraph in §1).
 >
+> - **Implemented but not wired** (no effect on results): the geographic-advantage
+>   model after Diamond (`GeographicAdvantage`, queried only by
+>   `HistoricalSimulation.get_climate_modifier`), local adaptation
+>   (`EvolutionModel.compute_local_adaptation`), and the CHELSA, SoilGrids, ETOPO
+>   and HYDE downloads.
+>
 > v0.2.x were calibration releases that fixed scientific-constant, coupling, and
-> timing bugs. See [CHANGELOG.md](CHANGELOG.md) for the full history. The
-> `Built primarily with Claude Code` framing in the header applies to the v0.1.0
-> generation; subsequent calibration/feature passes were human-led reviews with
-> LLM assistance.
+> timing bugs. See [CHANGELOG.md](CHANGELOG.md) for the full history. v0.1.0 to
+> v0.3.x were developed with Claude Code over many iterations of prompt
+> engineering, as a test of how far coding LLMs get on a project of this size.
+> The author directed the work, but did not review the generated code and its
+> documentation in depth. From v0.4.0 the work was specified in writing, decided
+> by the author at each open point, and verified by tests, a pre-specified
+> ablation and a trajectory fingerprint. The outcome of that review is part of
+> the experiment's result: the code ran and its tests passed, but several claims
+> in the documentation went beyond what the code did, and were corrected (see
+> CHANGELOG 0.4.0 and 0.5.0).
 > 
 > **Tested on:**
 > - Ubuntu 22.04 ARM, Python 3.11.
@@ -106,6 +124,8 @@ Each agent's movement bias and action intensity come from a cross-entropy-method
     | Batch JEPA |
     +------------+
 ```
+
+Diamond and Dawkins components are implemented but not wired into the simulation loop (see sections 6 and 7).
 
 ---
 
@@ -421,14 +441,18 @@ The historical scenario models 70,000 years of climate oscillation.
 
 ### 6. Geographic Determinism — Diamond's Thesis
 
-Agents experience different agricultural potential, disease resistance,
-and technology diffusion rates based on their geographic location.
+The code contains a geographic-advantage model after Diamond: agricultural
+potential, disease resistance and technology diffusion rates that depend on
+location. It is implemented as functions (`society/technology.py:
+GeographicAdvantage`, queried only by `HistoricalSimulation.get_climate_modifier`)
+but not connected to the simulation loop: no agent, settlement or nation reads
+these values, so the model has no effect on results.
 
 **Core reference:**
 - Diamond, J. (1997). *Guns, Germs, and Steel: The Fates of Human Societies*.
   W. W. Norton.
 
-**Implementation** (`society/technology.py: GeographicAdvantage`):
+**Model parameters** (`society/technology.py: GeographicAdvantage`; not used during a run):
 
 | Factor | Eurasia | Africa | Americas | Source |
 |--------|---------|--------|----------|--------|
@@ -437,22 +461,27 @@ and technology diffusion rates based on their geographic location.
 | Founder crops | 8 (wheat, barley, lentils...) | 3 (sorghum, millet, cowpea) | 3 (maize, squash, beans) | Diamond Ch. 8 |
 | Disease resistance (from animal proximity) | High (zoonotic exposure) | Low | Very low | Diamond Ch. 11 |
 
-Agricultural origins: Fertile Crescent (11,500 BP), Yellow River (10,000 BP),
-Yangtze (9,000 BP), Mesoamerica (9,000 BP), Andes (8,000 BP).
-Diffusion modeled at ~1 km/year along latitude, slower across climate barriers.
+The model's agricultural origins are the Fertile Crescent (11,500 BP), Yellow
+River (10,000 BP), Yangtze (9,000 BP), Mesoamerica (9,000 BP) and Andes
+(8,000 BP). In the model, agriculture spreads at ~1 km/year along latitude and
+more slowly across climate barriers; this diffusion is not computed during a run.
 
 ### 7. Evolution — Agent Adaptation
 
-Over many generations, agent populations accumulate adaptations to local
-environments (cold tolerance, altitude adaptation, disease resistance).
+Agent traits are inherited from both parents with crossover and mutation, so
+trait distributions can drift over generations. A local-adaptation model (cold
+tolerance, altitude adaptation, disease resistance) is implemented as a function
+(`EvolutionModel.compute_local_adaptation`) but not connected to the simulation
+loop, so it has no effect on results.
 
 **Core reference:**
 - Dawkins, R. (2009). *The Greatest Show on Earth: The Evidence for Evolution*.
   Transworld Publishers.
 
-**Implementation**: Trait inheritance via crossover + mutation (mutation rate 15%).
-Environmental selection pressure: agents better adapted to local temperature,
-altitude, and disease environment have higher survival and reproduction rates.
+**Implementation**: Trait inheritance via crossover + mutation (mutation rate 15%)
+is active. Environmental selection pressure is not modelled: the local-adaptation
+bonuses for temperature, altitude and disease environment are never applied, so
+they do not change survival or reproduction.
 
 ---
 
@@ -484,10 +513,10 @@ Module paths are relative to `src/oikoumene/`; tests live in `tests/`.
 | `macro/macro.py` | 14-state ODE: climate, resources, pollution, socioeconomics |
 | `society/geopolitics.py` | `NationState` and `GeopoliticalSystem`: emergent nations, nation statistics, summaries |
 | `society/interactions.py` | `InteractionsMixin` for `GeopoliticalSystem`: relations, trade (gravity model), conflict (IFs), negotiations, technology diffusion |
-| `society/technology.py` | Tech tree, geographic advantage (Diamond), evolution model (Dawkins) |
+| `society/technology.py` | Tech tree; geographic advantage (Diamond) and local adaptation (Dawkins), implemented but not wired into the simulation loop |
 | `core/bridge.py` | Bidirectional coupling: agents <-> macro <-> geopolitics; per-cell regen baselines |
 | `core/history.py` | 70,000-year timeline: eras, migration waves, spawn locations, `HistoricalSimulation` |
-| `core/paleoclimate.py` | `PaleoclimateModel`: CO₂, temperature and sea level over time, ice mask, land bridges |
+| `core/paleoclimate.py` | `PaleoclimateModel`: CO₂, temperature and sea level over time, ice mask |
 
 ### Extensions
 
@@ -598,8 +627,10 @@ Module paths are relative to `src/oikoumene/`; tests live in `tests/`.
 ### v0.2 calibration pass
 
 The v0.1.0 release was generated primarily with Claude Code in roughly two
-weeks. A subsequent domain-review pass identified six categories of bugs
-that affected scientific correctness without breaking the runtime:
+weeks. A subsequent prompt-driven calibration pass with Claude Code, directed
+by the author but without in-depth human review of the code, identified six
+categories of bugs that affected scientific correctness without breaking the
+runtime:
 
 1. **JEPA training did not actually train.** v0.1 estimated gradients with
    3 random search directions per weight matrix. For an encoder layer with
@@ -638,14 +669,15 @@ We document this honestly because we think the conclusion is interesting:
 **LLM-generated code can produce scientifically-flavoured architectures
 faster than humans can write them, but the physical and empirical
 calibration requires domain expertise that LLMs (at least currently)
-do not reliably substitute for.** Every fix in this list required a
-domain-grounded judgment call that the original generation pass got
-wrong despite confident-sounding code comments. The full v0.2 calibration
+do not reliably substitute for.** Every fix in this list corrected a
+calibration choice that the original generation pass got wrong despite
+confident-sounding code comments; the fixes themselves came from further
+prompt-driven passes and were not reviewed in depth either. The full v0.2 calibration
 pass is documented in [CHANGELOG.md](CHANGELOG.md).
 
-### v0.2.1 follow-up review
+### v0.2.1 follow-up pass
 
-A same-day follow-up review pass on v0.2.0 surfaced five additional bugs
+A same-day follow-up pass with Claude Code on v0.2.0 surfaced five additional bugs
 in the *integration glue* between the (now correctly calibrated) scientific
 modules and the simulation loop, plus several UI-payload issues. The
 themes are different from v0.2.0: where v0.2.0 was about scientific
@@ -693,8 +725,10 @@ The pattern echoes v0.2.0: even after a calibration pass that fixed the
 "science layer", a second pass at the *coupling* and *presentation*
 layers still found real bugs that affect what a reader of the simulation
 output would see. We document this not to claim every bug has now been
-found — it almost certainly hasn't — but to be honest about the cost of
-auditing LLM-generated code.
+found — it almost certainly hasn't — but to be honest about how hard
+LLM-generated code is to check: these passes were themselves prompt-driven
+and not reviewed in depth, and v0.4.0 and v0.5.0 found further documentation
+claims that went beyond what the code did.
 
 ### Calibration philosophy
 
@@ -709,8 +743,9 @@ observation rather than to round-number defaults:
 - Agent lifecycle to anthropological / demographic ranges
   (15-year reproduction, 80-year lifespan, 60-year senescence onset).
 
-Every calibration choice is verified by a test that would catch a
-regression from a future refactor.
+The calibration anchors above are exercised by tests that would catch a
+regression from a future refactor; before v0.4.0 the completeness of that
+test coverage was not reviewed.
 
 ---
 

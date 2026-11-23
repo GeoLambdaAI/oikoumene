@@ -205,7 +205,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         from SALib.sample import sobol as salib_sample
         from SALib.analyze import sobol as salib_analyze
-    except ImportError as exc:
+    except ImportError:
         print(
             "SALib is required. Install with:  pip install -e \".[sensitivity]\"",
             file=sys.stderr,

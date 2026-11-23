@@ -238,7 +238,8 @@ In the UI side panel:
 
 The key is stored only in the running process — it is not logged, dumped
 to `metadata.json`, sent over the WebSocket to the browser, or written
-to snapshot JSON. (Verified: see SECURITY.md §"Verified-safe".)
+to snapshot JSON. (This describes the code as written; it has not been
+independently audited. See SECURITY.md for the threat model.)
 
 ### Tuning LLM cost / latency
 

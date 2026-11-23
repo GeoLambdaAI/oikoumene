@@ -399,7 +399,8 @@ def write_summary(summary: dict, args: argparse.Namespace, pilot_result: dict | 
         json.dumps({"args": meta, "note": args.note, "pilot": pilot_result, **summary}, indent=2))
     header = (f"Config: {args.agents} agents, {args.ticks} ticks, train interval {args.train_interval}, "
               f"seeds {args.seed_start}..{args.seed_start + args.seeds - 1}, "
-              f"random_scale {np.round(args.random_scale, 4).tolist()}, const_intensity {args.const_intensity:.4f}" + (f"\n\nNote: {args.note}" if args.note else "")
+              f"random_scale {np.round(args.random_scale, 4).tolist()}, const_intensity {args.const_intensity:.4f}"
+              + (f"\n\nNote: {args.note}" if args.note else "")
               + (f"\n\nPilot: {json.dumps(pilot_result)}" if pilot_result else ""))
     md = summary_markdown(summary, header)
     (args.out_dir / "ablation_summary.md").write_text(md)

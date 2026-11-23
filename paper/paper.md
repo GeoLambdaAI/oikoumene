@@ -35,11 +35,17 @@ following established gravity-model and International Futures specifications.
 The simulator ships with two scenarios. *Scenario A* runs from the
 Out-of-Africa migration ~70,000 years before present through to climate
 futures beyond 2100, integrating paleoclimate from EPICA ice cores
-[@luthi2008high; @epica2004eight] and geographic determinism in the sense of
-@diamond1997guns. *Scenario B*
+[@luthi2008high; @epica2004eight]. A geographic-determinism model in the sense
+of @diamond1997guns is implemented but not yet coupled to the simulation loop,
+so it does not affect the results. *Scenario B*
 initialises from present-day data (World Bank, NOAA, NASA) and projects
-forward at monthly resolution. Every parameter, equation, and boundary
-condition is grounded in published literature, and the macro layer passes
+forward at monthly resolution. Parameters, equations and boundary
+conditions are taken from published literature where available. Calibrated
+values and known deviations of the macro model are documented in
+docs/validation.md, and the heuristic Earth grids in
+docs/data_attributions.md. The agent, geopolitics and settlement layers use
+heuristic constants that have not yet been documented against the
+literature. The macro layer passes
 9/9 IPCC AR6-calibrated validation checks plus two unit anchors (Mauna
 Loa decadal CO₂ growth rate; emergent equilibrium climate sensitivity)
 at 2100.

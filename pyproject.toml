@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "oikoumene"
-version = "0.4.0"
+version = "0.5.0"
 description = "A physics-based, AI-driven simulation of human civilization on Planet Earth — JEPA agents, macro ODE, emergent geopolitics, real Earth geography."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -106,3 +106,6 @@ select = ["E", "W", "F"]
 # eventlet.monkey_patch() must run before any other import so that sockets,
 # threads and time are patched; every import after it is intentionally late.
 "src/oikoumene/web/app.py" = ["E402"]
+# pytest.importorskip("torch") must run before the torch-dependent imports so the
+# module skips cleanly when the optional backend is absent.
+"tests/test_world_model_torch.py" = ["E402"]

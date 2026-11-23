@@ -4,6 +4,7 @@
 **Date of validation run:** 2026-05-06
 **Seed:** deterministic (no stochastic terms in BAU macro path)
 **Reproduction:** `python tests/test_macro.py`
+**Updated for 0.5.0:** code references now name files and symbols instead of line numbers; `tests/test_macro.py` still passes (9/9 checks, 2 unit tests, HadCRUT5 cross-check skipped when not fetched).
 
 ---
 
@@ -85,8 +86,8 @@ Full per-year trace is reproducible via `python tests/test_macro.py | tee logs/v
 ## 5. Known limitations
 
 1. **Single deterministic path.** The BAU run has no stochastic terms; results
-   are bit-exact across runs. Sensitivity analysis (Sobol indices on
-   climate sensitivity, tech ceiling, ECS) is planned for v0.2.
+   are bit-exact across runs. A Sobol sensitivity analysis of the macro
+   parameters was added in v0.4.0; see §6.
 2. **No regional disaggregation.** The macro layer is global; regional
    heterogeneity (e.g., per-country emissions) emerges only via the agent
    and geopolitics layers.
@@ -95,16 +96,18 @@ Full per-year trace is reproducible via `python tests/test_macro.py | tee logs/v
    versions should compare with Burke-Hsiang-Miguel 2015 specifications.
 4. **Tech transition single-scalar.** The `technology_level` ∈ [0.5, 5.0] does
    not distinguish between clean and dirty innovation paths. Acemoglu et al.
-   (2012) directed-technical-change extension is a v0.2 candidate.
-5. **Equation form vs. calibration constants.** Every equation in the codebase
-   reproduces the *published functional form* of its source paper. Calibration
+   (2012) directed-technical-change extension is a candidate for a later version.
+5. **Equation form vs. calibration constants.** The equations are intended
+   to reproduce the published functional forms of their source papers;
+   this has not been verified equation by equation. Calibration
    constants, however, are tuned to the simulator's tick rate (months to
    centuries depending on era), latent population scale (hundreds to thousands
    of agents representing billions of humans), and grid resolution (0.5°).
    Concrete examples: the DICE damage coefficient `a = 0.01` in
-   [`macro.py:407`](../src/oikoumene/macro/macro.py#L407) (vs. published DICE-2016R `a ≈ 0.00236`)
+   `MacroModel._ode_system` in [`macro.py`](../src/oikoumene/macro/macro.py) (`climate_damage`; vs. published DICE-2016R `a ≈ 0.00236`)
    reflects the simulator's accelerated time step; Hubbert depletion timescales
-   in [`macro.py:324`](../src/oikoumene/macro/macro.py#L324) are scaled to scenario
+   (`MacroModel.FOSSIL_DEPLETION_TIME_CONSTANT` and
+   `MINERAL_DEPLETION_TIME_CONSTANT` in [`macro.py`](../src/oikoumene/macro/macro.py)) are scaled to scenario
    duration rather than transcribed from Hubbert (1956). Reviewers should
    treat the simulator as a *qualitatively faithful* implementation rather
    than a coefficient-by-coefficient replica.
@@ -126,14 +129,18 @@ Full per-year trace is reproducible via `python tests/test_macro.py | tee logs/v
    and exposes the paper's Epps–Pulley SIGReg as an opt-in toggle.
 7. **Conceptual references vs. quantitative ones.** Diamond (1997),
    Dawkins (2009), Stringer (2012), and Marshak (2019) are cited at the
-   *structural* level — the simulator implements the continental-axis
-   multiplier, trait inheritance with mutation, Out-of-Africa migration
-   timing, and geological resource provinces — but these works do not publish
-   closed-form equations to transcribe. Earth4All / Dixson-Decleve et al.
+   *structural* level — the simulator implements trait inheritance with
+   mutation, Out-of-Africa migration timing, and geological resource
+   provinces — but these works do not publish closed-form equations to
+   transcribe. Diamond's continental-axis multiplier and the Dawkins-style
+   local adaptation exist as functions (`GeographicAdvantage`,
+   `EvolutionModel.compute_local_adaptation`) but are not connected to the
+   simulation loop, so they do not affect any result reported here. Earth4All / Dixson-Decleve et al.
    (2022) is similarly partial: the social tension model takes the structural
    form `f(inequality, food insecurity, env stress, expectation gap)` but the
    exact published coefficients are not fully available, so the calibration
-   in [`macro.py:192-200`](../src/oikoumene/macro/macro.py#L192-L200) is bespoke.
+   of `social_tension` in `MacroModel._compute_derived`
+   ([`macro.py`](../src/oikoumene/macro/macro.py)) is bespoke.
 
 ## 6. Parameter sensitivity (Sobol decomposition)
 

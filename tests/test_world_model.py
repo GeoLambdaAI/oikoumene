@@ -86,7 +86,9 @@ def test_linear_probe_physical_understanding():
     m = JEPAWorldModel(obs_dim=40, action_dim=8, latent_dim=24, seed=1)
     rng = np.random.RandomState(2)
     for _ in range(120):
-        o = rng.randn(40); a = rng.uniform(-1, 1, 8); n = rng.randn(40)
+        o = rng.randn(40)
+        a = rng.uniform(-1, 1, 8)
+        n = rng.randn(40)
         m.store_experience(o, a, n)
 
     probe = m.probe_physical_understanding()

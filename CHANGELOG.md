@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-23
+
+> **The package layout changed.** The source is now the installable package
+> `src/oikoumene/`, so imports are `oikoumene.<subpackage>.<module>` (for
+> example `from oikoumene.core.world import World`) instead of top-level
+> modules, and a checkout must be installed with `pip install -e .` (the data
+> generators run as `python -m oikoumene.datagen.<name>`). `python app.py`
+> still starts the server. Simulation behaviour is unchanged: a bit-exact
+> per-tick trajectory fingerprint is identical before and after.
+
 ### Changed — package layout (no behaviour change)
 
 - Source moved into an installable `src/oikoumene/` package: `core/`,
@@ -38,17 +48,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Ruff configured in `pyproject.toml` (`[tool.ruff]`: line length 120, rules
   E, W, F; per-file E402 ignore for `web/app.py`, whose imports must follow
-  `eventlet.monkey_patch()`), and `ruff check src app.py` runs in CI.
-- All 80 findings in `src/` and `app.py` fixed: unused imports and locals
-  removed (calls with side effects kept), placeholder-less f-strings made
-  plain, long message/prompt lines split by implicit concatenation (strings
-  byte-identical, checked by AST comparison), semicolon statements split, two
-  `lambda` assignments turned into `def`.
+  `eventlet.monkey_patch()`, and for `tests/test_world_model_torch.py`, whose
+  imports must follow `pytest.importorskip("torch")`); `ruff check .` lints
+  the whole repository in CI.
+- All findings fixed (80 in `src/` and `app.py`, 34 in `tests/` and
+  `scripts/`): unused imports and locals removed (calls with side effects
+  kept), placeholder-less f-strings made plain, long message/prompt lines split
+  by implicit concatenation (strings byte-identical, checked by AST
+  comparison), semicolon statements split, three `lambda` assignments turned
+  into `def`. No test was removed.
 
 ### Removed
 
-- Dead code with no documented behaviour: `AgentMemory.get_best_strategy` and
-  `ResourceMap.to_grid_data`.
+- Dead code with no documented behaviour: `AgentMemory.get_best_strategy`,
+  `ResourceMap.to_grid_data`, and `PaleoclimateModel.is_land_bridge_active`
+  with its `LAND_BRIDGES` table.
 
 ### Added
 
@@ -77,8 +91,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
-- README header attribution updated (models used, spec-driven development,
-  verification by test suite and trajectory fingerprint).
+- Unwired models documented as such: the geographic-advantage model after
+  Diamond (`GeographicAdvantage`, reached only through
+  `HistoricalSimulation.get_climate_modifier`) and local adaptation
+  (`EvolutionModel.compute_local_adaptation`) are implemented but not called
+  by the simulation loop and have no effect on results. README §6 and §7,
+  `docs/validation.md` and `paper/paper.md` corrected; the README status block
+  lists what is implemented but not wired.
+- Provenance stated plainly. The README header and status note now say that
+  v0.1.0 to v0.3.x were developed with Claude Code through iterative prompt
+  engineering, directed by the author but without in-depth review of the
+  generated code and documentation, and that from v0.4.0 the work is
+  specified in writing, decided by the author at each open point and verified
+  by tests, a pre-specified ablation and a trajectory fingerprint.
+- Claims of human review, audit or complete validation of pre-0.4.0 work
+  corrected in README (*Implementation Notes*, *Calibration philosophy*),
+  HowTo (API-key handling) and `docs/dev_log.md`. Older CHANGELOG entries are
+  left as written.
+- Caption under the README architecture diagram: the Diamond and Dawkins
+  components are implemented but not wired into the simulation loop.
+- `paper/paper.md` no longer claims that every parameter, equation and boundary
+  condition is grounded in published literature: it names where the macro
+  model's calibrated values and deviations are documented
+  (`docs/validation.md`) and the heuristic Earth grids
+  (`docs/data_attributions.md`), and states that the agent, geopolitics and
+  settlement constants are not yet documented against the literature.
+- `docs/validation.md`: stale `macro.py` line references replaced by symbol
+  names (`MacroModel._ode_system`, `FOSSIL_DEPLETION_TIME_CONSTANT`,
+  `MINERAL_DEPLETION_TIME_CONSTANT`, `MacroModel._compute_derived`); the
+  Sobol analysis is described as added in v0.4.0 instead of "planned for
+  v0.2"; the header notes the 0.5.0 update and that `tests/test_macro.py`
+  still passes. The validation run itself remains the 0.3.0 run.
+- `docs/validation.md` limitations: the equations are now described as
+  intended to reproduce the published functional forms, not verified equation
+  by equation (previously "Every equation in the codebase reproduces the
+  published functional form of its source paper"); the Acemoglu
+  directed-technical-change extension is "a candidate for a later version"
+  instead of "a v0.2 candidate".
 - `generate_empirical_inputs.py`: the outputs are loaded by
   `core/empirical_ingest.py`, not `world.py`.
 - README, HowTo and CONTRIBUTING document `--force` and `--output-dir`; README,
@@ -908,7 +957,8 @@ release, not a refactor.
 - **`SECURITY.md`** added — threat model, in-scope vs. out-of-scope mitigations, operator deployment checklist, and a vulnerability-disclosure process via GitHub's private vulnerability reporting.
 - Verified that `LLMModule.api_key` is not leaked through `get_status()`, `get_full_state()`, snapshot dumps, or `metadata.json`.
 
-[Unreleased]: https://github.com/GeoLambdaAI/oikoumene/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/GeoLambdaAI/oikoumene/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/GeoLambdaAI/oikoumene/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/GeoLambdaAI/oikoumene/releases/tag/v0.4.0
 [0.2.1]: https://github.com/GeoLambdaAI/oikoumene/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/GeoLambdaAI/oikoumene/compare/v0.1.0...v0.2.0

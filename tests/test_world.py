@@ -11,7 +11,6 @@ Verifies:
 3. _distance_deg threshold semantics: settlement-proximity behavior is preserved
    at the equator and corrected at high latitudes
 """
-import sys, os
 import numpy as np
 
 
@@ -21,7 +20,8 @@ def test_distance_haversine():
 
     # Reproduce the method (extracted from world.py to allow standalone test)
     def distance_deg(lat1, lng1, lat2, lng2):
-        phi1 = np.radians(lat1); phi2 = np.radians(lat2)
+        phi1 = np.radians(lat1)
+        phi2 = np.radians(lat2)
         dphi = np.radians(lat2 - lat1)
         dlmb = np.radians(lng2 - lng1)
         a = np.sin(dphi/2)**2 + np.cos(phi1)*np.cos(phi2)*np.sin(dlmb/2)**2
@@ -74,7 +74,8 @@ def test_threshold_semantics_preserved():
     print("Test 2: Threshold semantics — '5-deg neighborhood'")
 
     def distance_deg(lat1, lng1, lat2, lng2):
-        phi1 = np.radians(lat1); phi2 = np.radians(lat2)
+        phi1 = np.radians(lat1)
+        phi2 = np.radians(lat2)
         dphi = np.radians(lat2 - lat1)
         dlmb = np.radians(lng2 - lng1)
         a = np.sin(dphi/2)**2 + np.cos(phi1)*np.cos(phi2)*np.sin(dlmb/2)**2

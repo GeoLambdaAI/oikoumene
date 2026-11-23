@@ -7,7 +7,6 @@ and error handling. No network calls required.
 
 
 from oikoumene.llm.llm_module import LLMModule, LLMConfig
-import numpy as np
 
 
 class MockAgent:
@@ -73,7 +72,8 @@ def test_fallback_text_varies_by_traits():
     # High ambition -> "hard bargain"
     ambitious = MockAgent("Ambitious", ambition=0.9, cooperation=0.2)
     result = llm.generate_trade_negotiation(ambitious, partner, 10.0, {})
-    assert "hard bargain" in result["proposer_text"].lower() or "aggressive" in result["proposer_text"].lower() or "Ambitious" in result["proposer_text"]
+    assert ("hard bargain" in result["proposer_text"].lower() or "aggressive" in result["proposer_text"].lower()
+            or "Ambitious" in result["proposer_text"])
     print("  PASS: ambitious agent gets distinct trade text")
 
     # High cooperation -> "fair exchange"

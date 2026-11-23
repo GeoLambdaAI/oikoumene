@@ -9,7 +9,6 @@ Verifies:
 4. Conflict probability is monotonically decreasing in trade and increasing in tension.
 5. API surface is unchanged (no breaking changes for bridge.py and world.py).
 """
-import types
 import numpy as np
 
 # Stub macro module if missing (test isolation)
@@ -115,7 +114,6 @@ def test_calibration_5_nation_bau():
     from oikoumene.society.geopolitics import GeopoliticalSystem
 
     n_runs = 30
-    n_nations = 5
     prev30, prev50, prev90 = [], [], []
 
     for run in range(n_runs):
@@ -194,7 +192,7 @@ def test_climate_summit_cadence_independent_of_nation_count():
 
 def test_api_unchanged():
     print("Test 5: Public API surface unchanged")
-    from oikoumene.society.geopolitics import GeopoliticalSystem, NationState
+    from oikoumene.society.geopolitics import GeopoliticalSystem
 
     g = GeopoliticalSystem()
     # Methods that bridge.py and world.py call

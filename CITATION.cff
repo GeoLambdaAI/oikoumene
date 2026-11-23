@@ -13,8 +13,8 @@ authors:
     given-names: Gerrit
     name-suffix: Dr.
     affiliation: GeoLambda GmbH
-version: 0.4.0
-date-released: "2026-11-21"
+version: 0.5.0
+date-released: "2026-11-23"
 license: AGPL-3.0-or-later
 repository-code: "https://github.com/GeoLambdaAI/oikoumene"
 url: "https://www.geolambda.ai"

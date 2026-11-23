@@ -57,7 +57,10 @@ def _assert_close(analytic, numeric, name):
 def test_linear_gradients():
     print("\nGradcheck: linear")
     rng = np.random.RandomState(0)
-    x = rng.randn(4, 5); W = rng.randn(5, 3); b = rng.randn(3); dy = rng.randn(4, 3)
+    x = rng.randn(4, 5)
+    W = rng.randn(5, 3)
+    b = rng.randn(3)
+    dy = rng.randn(4, 3)
 
     _, cache = linear_forward(x, W, b)
     dx, dW, db = linear_backward(dy, cache)
@@ -70,7 +73,8 @@ def test_linear_gradients():
 def test_gelu_gradients():
     print("\nGradcheck: gelu")
     rng = np.random.RandomState(1)
-    x = rng.randn(4, 6); dy = rng.randn(4, 6)
+    x = rng.randn(4, 6)
+    dy = rng.randn(4, 6)
 
     _, cache = gelu_forward(x)
     dx = gelu_backward(dy, cache)
@@ -80,7 +84,9 @@ def test_gelu_gradients():
 def test_rms_norm_gradients():
     print("\nGradcheck: rms_norm")
     rng = np.random.RandomState(2)
-    x = rng.randn(4, 7); gamma = rng.randn(7); dy = rng.randn(4, 7)
+    x = rng.randn(4, 7)
+    gamma = rng.randn(7)
+    dy = rng.randn(4, 7)
 
     _, cache = rms_norm_forward(x, gamma)
     dx, dgamma = rms_norm_backward(dy, cache)
@@ -93,13 +99,18 @@ def test_adaln_gradients():
     print("\nGradcheck: adaln")
     rng = np.random.RandomState(3)
     D, A, B = 6, 4, 5
-    h = rng.randn(B, D); action = rng.randn(B, A); gamma = rng.randn(D)
-    W_scale = rng.randn(A, D); W_shift = rng.randn(A, D); dy = rng.randn(B, D)
+    h = rng.randn(B, D)
+    action = rng.randn(B, A)
+    gamma = rng.randn(D)
+    W_scale = rng.randn(A, D)
+    W_shift = rng.randn(A, D)
+    dy = rng.randn(B, D)
 
     _, cache = adaln_forward(h, action, gamma, W_scale, W_shift)
     dh, daction, dgamma, dW_scale, dW_shift = adaln_backward(dy, cache, W_scale, W_shift)
 
-    fwd = lambda: np.sum(adaln_forward(h, action, gamma, W_scale, W_shift)[0] * dy)
+    def fwd():
+        return np.sum(adaln_forward(h, action, gamma, W_scale, W_shift)[0] * dy)
     _assert_close(dh, _numeric_grad(fwd, h), "dh")
     _assert_close(daction, _numeric_grad(fwd, action), "daction")
     _assert_close(dgamma, _numeric_grad(fwd, gamma), "dgamma")
